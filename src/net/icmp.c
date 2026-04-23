@@ -152,18 +152,28 @@ int icmp_ping_once(const char *host, int identifier, int sequence,
         if (n <= 0) continue;
 
         icmp_hdr_t *rh;
-        if (dgram) {
-            /* DGRAM: kernel strips IP header; payload starts at buf */
-            if (n < (ssize_t)sizeof(*rh)) continue;
-            rh = (icmp_hdr_t *)buf;
-        } else {
-            /* RAW: includes IP header */
+        /*
+         * On macOS, DGRAM socket includes IP header (same as RAW).
+         * On Linux, DGRAM socket strips IP header.
+         */
+        int has_ip_header = (!dgram) || ICMP_DGRAM_INCLUDES_IP_HEADER;
+        if (has_ip_header) {
             if (n < (ssize_t)(sizeof(ip_hdr_t) + sizeof(*rh))) continue;
             ip_hdr_t *iph = (ip_hdr_t *)buf;
             rh = (icmp_hdr_t *)(buf + IP_HL(iph) * 4);
+        } else {
+            if (n < (ssize_t)sizeof(*rh)) continue;
+            rh = (icmp_hdr_t *)buf;
         }
         if (rh->ICMP_TYPE != ICMP_ECHOREPLY) continue;
-        if (!dgram && ntohs(rh->ICMP_ID) != identifier) continue;
+        /*
+         * On macOS DGRAM, identifier matches (kernel filters).
+         * On Linux DGRAM, identifier is rewritten but kernel delivers only matches.
+         * For RAW sockets, we must verify manually.
+         */
+        if (!dgram || ICMP_DGRAM_INCLUDES_IP_HEADER) {
+            if (ntohs(rh->ICMP_ID) != identifier) continue;
+        }
         if (ntohs(rh->ICMP_SEQ) != sequence) continue;
 
         long rtt_us = now_us() - t_send;
