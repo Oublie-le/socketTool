@@ -1,120 +1,121 @@
 # socketTool
 
-一个用于在多台 Linux 设备上测试 TCP / UDP / WebSocket 等网络协议连通性的命令行工具集。
+A command-line toolkit for testing TCP / UDP / WebSocket connectivity across
+multiple Linux devices.
 
-采用 **BusyBox 风格** 的多功能单体二进制架构：所有子命令编译进同一个可执行文件 `socketTool`，既可以通过 `socketTool <applet>` 调用，也可以通过 applet 同名软链接直接调用，便于在嵌入式 / 资源受限的 Linux 设备上部署。
+Built as a **BusyBox-style** multi-call binary: every sub-command is compiled
+into the same executable `socketTool` and can be invoked either via
+`socketTool <applet>` or via an applet symlink — well-suited to embedded /
+resource-constrained Linux devices.
 
-> 项目语言：C (C99 / POSIX)
-> 依赖：仅 `pthread`，**零外部依赖**（WebSocket 内置 SHA-1 + Base64）
-> 架构参考：BusyBox
+> 📖 **中文文档：[README.zh.md](README.zh.md)**
 
----
-
-## 特性
-
-- **多协议**：TCP / UDP / WebSocket（RFC 6455 文本帧）
-- **双角色**：每个协议都可作为 **客户端** 或 **服务端** 运行
-- **批量 ping**：支持 **单 IP / 范围 (`192.168.1.10-50`) / 完整范围 (`a-b`) / CIDR (`10.0.0.0/24`) / 主机列表文件**，TCP-ping 无需 root，亦可 ICMP
-- **批量协议测试**：`btest` 多线程并发对多个 `host:port[:proto]` 检测
-- **中英文双语**：编译期 `make LANG=zh|en`，运行期 `--lang zh|en` 或 `ST_LANG` 环境变量
-- **美观 CLI**：Unicode 图标 (✔ ✘ ⚠ ℹ ◀ ▶ ⏱ 🚀 🌐)、亮色调色板、CJK 宽度对齐
-- **Tab 补全**：随安装一同部署 bash completion，支持子命令、选项、模式枚举、文件名
-- **完整测试套件**：`make test` 一键回归 (range 单测 + 各 applet 端到端)
+> Language: C (C99 / POSIX)
+> Dependencies: `pthread` only — **zero external dependencies**
+> (WebSocket bundles its own SHA-1 + Base64; ICMP ping is implemented natively)
+> Reference architecture: BusyBox
 
 ---
 
-## 目录结构 (按层组织)
+## Features
+
+- **Multi-protocol**: TCP / UDP / WebSocket (RFC 6455 text frames)
+- **Dual role**: every protocol can run as **client** or **server**
+- **Batch ping** with rich input: single IP, last-octet range
+  (`192.168.1.10-50`), full IP range (`a-b`), CIDR (`10.0.0.0/24`),
+  or a hosts file. Both TCP-ping and **native ICMP ping** (raw socket,
+  no shelling out to `/bin/ping`).
+- **Reverse DNS** column: ping results show the resolved hostname for each IP
+- **Batch protocol test**: `btest` runs concurrent TCP / UDP / WS probes against
+  many `host:port[:proto]` targets
+- **Bilingual UI**: compile-time `make LANG=zh|en`; runtime `--lang zh|en`
+  or `ST_LANG` env var
+- **Pretty CLI**: Unicode icons (✔ ✘ ⚠ ℹ ◀ ▶ ⏱ 🚀 🌐), bright color palette,
+  CJK-width-aware tables, ASCII fallback on non-UTF-8 terminals
+- **Bash tab completion** for all sub-commands, options, and enum values
+- **Test suite**: `make test` runs both C unit tests and end-to-end shell tests
+
+---
+
+## Layout
 
 ```
 socketTool/
 ├── Makefile
-├── README.md
+├── README.md           # this file (English)
+├── README.zh.md        # Chinese
 ├── src/
-│   ├── core/        # 入口与 applet 分发
-│   │   ├── main.c
-│   │   ├── applet.h
-│   │   └── applets.c
-│   ├── ui/          # 终端 UI：颜色、图标、表格、进度条
-│   │   ├── ui.h
-│   │   └── ui.c
-│   ├── i18n/        # 多语言字符串表 (中/英)
-│   │   ├── i18n.h
-│   │   └── i18n.c
-│   ├── net/         # 网络/socket 通用辅助、IP 范围/CIDR 展开
-│   │   ├── net.h
-│   │   └── net.c
-│   └── applets/     # 各 applet 实现
-│       ├── tcp.c    udp.c    ws.c    bping.c    btest.c
-├── tests/           # 测试模块
-│   ├── lib.sh
-│   ├── run_all.sh
-│   ├── unit_range.c
-│   └── test_*.sh
-├── scripts/
-│   └── socketTool.bash-completion
-└── examples/
-    ├── hosts.txt
-    └── targets.txt
+│   ├── core/           # entry point + applet dispatch
+│   ├── ui/             # colors, icons, tables, progress
+│   ├── i18n/           # bilingual string tables
+│   ├── net/            # socket helpers, ICMP, IP range/CIDR expansion
+│   └── applets/        # tcp.c udp.c ws.c bping.c btest.c
+├── tests/              # unit + e2e tests
+├── scripts/            # bash-completion script
+└── examples/           # sample hosts / targets files
 ```
 
 ---
 
-## 构建
+## Build
 
 ```bash
-make                       # 默认英文 UI
-make LANG=zh               # 默认中文 UI
-make links                 # 生成所有 applet 软链接
+make help                  # list all targets
+make                       # build (English UI by default)
+make LANG=zh               # build with Chinese UI as default
+make links                 # create applet symlinks in cwd
 make install PREFIX=/usr/local
-make test                  # 跑全套测试
+make test                  # run the full test suite
 make clean
 ```
 
-安装时会同时把 bash completion 脚本部署到 `$PREFIX/share/bash-completion/completions/socketTool`。
+`make install` also deploys the bash-completion script to
+`$PREFIX/share/bash-completion/completions/socketTool`.
 
 ---
 
-## 使用
+## Usage
 
 ```bash
-# 主程序 + 子命令
+# Main binary + sub-command
 socketTool <applet> [options]
 
-# 软链接直接调用
+# Or directly via the applet symlink
 tcp-client -H 192.168.1.10 -p 8080
 ```
 
-直接运行 `socketTool` 不带参数会显示带颜色的 applet 列表；`socketTool <applet> -h` 查看子命令帮助。
+Run `socketTool` with no arguments to see the colored applet list, or
+`socketTool <applet> -h` for per-applet help.
 
-### 全局选项 (在 applet 之前/之后均可)
+### Global flags (accepted before or after the applet)
 
-| 选项                | 说明                            |
-| ------------------- | ------------------------------- |
-| `--lang en\|zh`     | 切换输出语言                    |
-| `--no-color`        | 关闭颜色 (亦可 `NO_COLOR=1`)    |
-| `-V, --version`     | 显示版本                        |
+| Flag                | Description                          |
+| ------------------- | ------------------------------------ |
+| `--lang en\|zh`     | Switch UI language at runtime        |
+| `--no-color`        | Disable colors (also `NO_COLOR=1`)   |
+| `-V, --version`     | Print version                        |
 
-### Applet 一览
+### Applets
 
-| Applet        | 说明                                                |
-| ------------- | --------------------------------------------------- |
-| `tcp-client`  | TCP 客户端：连接 / 发送 / 交互 / 计数               |
-| `tcp-server`  | TCP 服务端：监听 / echo \| discard                  |
-| `udp-client`  | UDP 客户端：多次发送 + RTT / 丢包                   |
-| `udp-server`  | UDP 服务端：echo \| discard                         |
-| `ws-client`   | WebSocket 客户端 (ws://)                            |
-| `ws-server`   | WebSocket 服务端                                    |
-| `bping`       | 批量 ping（**单点 / 范围 / CIDR / 文件**，TCP/ICMP）|
-| `btest`       | 批量协议连通性测试（TCP / UDP / WS）                |
+| Applet        | Description                                              |
+| ------------- | -------------------------------------------------------- |
+| `tcp-client`  | TCP client: connect / send / interactive / count         |
+| `tcp-server`  | TCP server: listen / echo \| discard                     |
+| `udp-client`  | UDP client: multi-send + RTT / loss stats                |
+| `udp-server`  | UDP server: echo \| discard                              |
+| `ws-client`   | WebSocket client (ws://)                                 |
+| `ws-server`   | WebSocket server                                         |
+| `bping`       | Batch ping (single / range / CIDR / file, ICMP \| TCP)   |
+| `btest`       | Batch protocol connectivity test (TCP / UDP / WS)        |
 
-### 示例
+### Examples
 
 #### TCP
 
 ```bash
 socketTool tcp-server -p 9000
 socketTool tcp-client -H 192.168.1.10 -p 9000 -m "hello"
-socketTool tcp-client -H 192.168.1.10 -p 9000 -i        # 交互
+socketTool tcp-client -H 192.168.1.10 -p 9000 -i        # interactive
 ```
 
 #### UDP
@@ -131,30 +132,22 @@ socketTool ws-server -p 9002
 socketTool ws-client -H 192.168.1.10 -p 9002 -m '{"hello":"ws"}'
 ```
 
-#### 批量 ping (range / CIDR)
+#### Batch ping (range / CIDR, native ICMP)
 
 ```bash
-# 单点
-socketTool bping 192.168.1.10
-
-# 末段范围
-socketTool bping 192.168.1.10-50
-
-# 完整范围
-socketTool bping 192.168.1.10-192.168.2.20
-
-# CIDR
-socketTool bping 10.0.0.0/24
-
-# 混合 + 文件
-socketTool bping -p 22 -j 64 -t 800 \
-    -f examples/hosts.txt 192.168.1.0/29 router.local
-
-# ICMP 模式 (依赖系统 ping)
+# Native ICMP ping (raw socket; needs CAP_NET_RAW or root,
+# or set the unprivileged ICMP sysctl: see "Permissions" below)
 socketTool bping -m icmp 8.8.8.8 1.1.1.1
+
+# TCP-ping (no privileges required)
+socketTool bping -m tcp -p 22 192.168.1.0/24
+
+# Mix CLI + file, custom concurrency
+socketTool bping -p 22 -j 64 -t 800 \
+    -f examples/hosts.txt 192.168.1.10-50 router.local
 ```
 
-#### 批量协议测试
+#### Batch protocol test
 
 ```bash
 socketTool btest 192.168.1.10:80:tcp 192.168.1.10:53:udp 192.168.1.10:8080:ws
@@ -163,77 +156,78 @@ socketTool btest -f examples/targets.txt -P tcp -j 32
 
 ---
 
-## 中英文切换
+## Permissions for native ICMP
+
+Native ICMP echo uses raw sockets and normally requires either:
+
+- running as root, or
+- `setcap cap_net_raw+ep ./socketTool`, or
+- enabling unprivileged ICMP for your group:
+  `sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`
+  (Linux supports `IPPROTO_ICMP` datagram sockets for non-root since 3.0;
+  socketTool falls back to that automatically when `SOCK_RAW` is denied.)
+
+If neither is available, use `-m tcp` (the default), which needs no privileges.
+
+---
+
+## Bilingual UI
 
 ```bash
-# 编译期默认
+# Compile-time default
 make LANG=zh
 
-# 运行期切换 (优先于编译默认)
+# Runtime override (takes precedence over compile default)
 socketTool --lang zh bping 10.0.0.0/30
 ST_LANG=zh tcp-client -H 127.0.0.1 -p 9000
 ```
 
 ---
 
-## Tab 补全
+## Tab completion
 
 ```bash
-# 临时启用
+# Try without installing
 . scripts/socketTool.bash-completion
-
-# 安装后会自动 source（如果系统启用了 bash-completion）
-make install
 ```
 
-支持的补全：
-- `socketTool <Tab>` → 列出所有 applet
-- `tcp-client -<Tab>` → 列出选项
+After `make install`, the script is auto-loaded if your distro enables
+bash-completion. Completions provided:
+
+- `socketTool <Tab>` → list applets
+- `tcp-client -<Tab>` → list options
 - `bping -m <Tab>` → `tcp icmp`
 - `btest -P <Tab>` → `tcp udp ws`
 - `--lang <Tab>` → `en zh`
 - `-H <Tab>` → `/etc/hosts` + `localhost / 127.0.0.1`
-- `-f <Tab>` → 文件名
+- `-f <Tab>` → file names
 
 ---
 
-## 测试
+## Tests
 
 ```bash
 make test
 ```
 
-输出示例：
+Coverage:
 
-```
-━━━ unit tests ━━━
-  ✔ single host
-  ✔ last-octet range 1-3
-  ...
-━━━ test_tcp.sh ━━━
-  ✔ tcp client connects & echoes
-  ...
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ALL TESTS PASSED
-```
-
-测试覆盖：
-- `tests/unit_range.c` ：`host_range_expand` 单元测试 (单点/范围/CIDR/边界)
-- `tests/test_dispatch.sh` ：主程序与 i18n 切换
-- `tests/test_tcp.sh` `test_udp.sh` `test_ws.sh` ：协议端到端
-- `tests/test_bping.sh` `test_btest.sh` ：批量 applet
+- `tests/unit_range.c` — unit tests for `host_range_expand`
+- `tests/test_dispatch.sh` — main binary, `--lang`, symlink dispatch
+- `tests/test_tcp.sh` `test_udp.sh` `test_ws.sh` — protocol e2e
+- `tests/test_bping.sh` `test_btest.sh` — batch applets
 
 ---
 
-## 退出码
+## Exit codes
 
-| 码 | 含义                     |
-| -- | ------------------------ |
-| 0  | 成功                     |
-| 1  | 参数错误 / 用法错误      |
-| 2  | 资源初始化失败           |
-| 3  | 通信错误                 |
-| 4  | 批量任务存在失败项       |
+| Code | Meaning                                  |
+| ---- | ---------------------------------------- |
+| 0    | success                                  |
+| 1    | bad arguments / usage                    |
+| 2    | resource init failed (connect / listen)  |
+| 3    | I/O error                                |
+| 4    | batch job had at least one failure       |
 
 ---
 
