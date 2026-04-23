@@ -1,0 +1,28 @@
+Makefile
+  673f52fdda72fb43 3,14-16,38,40-46,48,50-52,60,66,68,79,84-89,92,95-119
+README.md
+  673f52fdda72fb43 31,65,178
+README.zh.md
+  673f52fdda72fb43 19-20,22,68,70,72,158-159,163-172,183-196,201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.10",
+  "base_commit_sha": "638efc7882f935efb60a5b456f128b63029011f7",
+  "prompts": {
+    "673f52fdda72fb43": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "098278e7-0eed-4e6c-9147-bd5ffa068038",
+        "model": "claude-opus-4.7"
+      },
+      "human_author": "fengpijie",
+      "messages": [],
+      "total_additions": 108,
+      "total_deletions": 39,
+      "accepted_lines": 93,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/bb6eb191484483959b70d88db417261ce175f54e2911e2bcf03c44e64bd26337"
+    }
+  }
+}
