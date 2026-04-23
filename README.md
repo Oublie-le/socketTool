@@ -28,7 +28,7 @@ resource-constrained Linux devices.
 - **Reverse DNS** column: ping results show the resolved hostname for each IP
 - **Batch protocol test**: `btest` runs concurrent TCP / UDP / WS probes against
   many `host:port[:proto]` targets
-- **Bilingual UI**: compile-time `make LANG=zh|en`; runtime `--lang zh|en`
+- **Bilingual UI**: compile-time `make UILANG=zh|en`; runtime `--lang zh|en`
   or `ST_LANG` env var
 - **Pretty CLI**: Unicode icons (✔ ✘ ⚠ ℹ ◀ ▶ ⏱ 🚀 🌐), bright color palette,
   CJK-width-aware tables, ASCII fallback on non-UTF-8 terminals
@@ -62,7 +62,7 @@ socketTool/
 ```bash
 make help                  # list all targets
 make                       # build (English UI by default)
-make LANG=zh               # build with Chinese UI as default
+make UILANG=zh               # build with Chinese UI as default
 make links                 # create applet symlinks in cwd
 make install PREFIX=/usr/local
 make test                  # run the full test suite
@@ -175,7 +175,7 @@ If neither is available, use `-m tcp` (the default), which needs no privileges.
 
 ```bash
 # Compile-time default
-make LANG=zh
+make UILANG=zh
 
 # Runtime override (takes precedence over compile default)
 socketTool --lang zh bping 10.0.0.0/30

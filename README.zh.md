@@ -16,9 +16,10 @@
 
 - **多协议**：TCP / UDP / WebSocket（RFC 6455 文本帧）
 - **双角色**：每个协议都可作为 **客户端** 或 **服务端** 运行
-- **批量 ping**：支持 **单 IP / 范围 (`192.168.1.10-50`) / 完整范围 (`a-b`) / CIDR (`10.0.0.0/24`) / 主机列表文件**，TCP-ping 无需 root，亦可 ICMP
+- **批量 ping**：支持 **单 IP / 范围 (`192.168.1.10-50`) / 完整范围 (`a-b`) / CIDR (`10.0.0.0/24`) / 主机列表文件**；**原生 C 实现的 ICMP**（无需 `/bin/ping`），亦支持 TCP-ping
+- **结果含主机信息**：`bping` 结果表格列出 target / 解析 IP / 反向 DNS hostname / 状态 / 时延 / 备注
 - **批量协议测试**：`btest` 多线程并发对多个 `host:port[:proto]` 检测
-- **中英文双语**：编译期 `make LANG=zh|en`，运行期 `--lang zh|en` 或 `ST_LANG` 环境变量
+- **中英文双语**：编译期 `make UILANG=zh|en`，运行期 `--lang zh|en` 或 `ST_LANG` 环境变量
 - **美观 CLI**：Unicode 图标 (✔ ✘ ⚠ ℹ ◀ ▶ ⏱ 🚀 🌐)、亮色调色板、CJK 宽度对齐
 - **Tab 补全**：随安装一同部署 bash completion，支持子命令、选项、模式枚举、文件名
 - **完整测试套件**：`make test` 一键回归 (range 单测 + 各 applet 端到端)
@@ -64,9 +65,11 @@ socketTool/
 ## 构建
 
 ```bash
+make help                  # 查看所有 make 目标
 make                       # 默认英文 UI
-make LANG=zh               # 默认中文 UI
+make UILANG=zh             # 默认中文 UI
 make links                 # 生成所有 applet 软链接
+make setcap                # 给 ./socketTool 加 CAP_NET_RAW (原生 ICMP 免 root)
 make install PREFIX=/usr/local
 make test                  # 跑全套测试
 make clean
@@ -152,9 +155,21 @@ socketTool bping 10.0.0.0/24
 socketTool bping -p 22 -j 64 -t 800 \
     -f examples/hosts.txt 192.168.1.0/29 router.local
 
-# ICMP 模式 (依赖系统 ping)
+# ICMP 模式 (原生 C 实现，无需 /bin/ping；
+# 需要 CAP_NET_RAW 或开启 net.ipv4.ping_group_range)
 socketTool bping -m icmp 8.8.8.8 1.1.1.1
 ```
+
+#### bping 结果列说明
+
+| 列        | 含义                                       |
+| --------- | ------------------------------------------ |
+| target    | 你输入的目标 (IP / hostname / 范围中的一项)|
+| ip        | 解析后的 IPv4                              |
+| hostname  | 反向 DNS 主机名（无则 `-`，可 `-n` 关闭）  |
+| result    | OK / FAIL                                  |
+| rtt(ms)   | 探测耗时                                   |
+| info      | 失败原因                                   |
 
 #### 批量协议测试
 
@@ -165,11 +180,25 @@ socketTool btest -f examples/targets.txt -P tcp -j 32
 
 ---
 
+## 原生 ICMP 权限
+
+`-m icmp` 使用 raw socket，需要满足以下任一条件：
+
+- 以 root 运行
+- `make setcap` 给 `./socketTool` 加 `CAP_NET_RAW` 权限
+- 开启非特权 ICMP：`sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`
+  （Linux ≥ 3.0 支持 `IPPROTO_ICMP` datagram socket；socketTool 在 RAW 被拒时
+  会自动降级到这种方式）
+
+若以上都不可用，请改用 `-m tcp`（默认值，无需任何权限）。
+
+---
+
 ## 中英文切换
 
 ```bash
 # 编译期默认
-make LANG=zh
+make UILANG=zh
 
 # 运行期切换 (优先于编译默认)
 socketTool --lang zh bping 10.0.0.0/30

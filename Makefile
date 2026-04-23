@@ -1,10 +1,6 @@
 ## socketTool — BusyBox-style multi-call binary
 ##
-## Build:        make            (default: English UI)
-## Build (zh):   make LANG=zh    (Chinese UI)
-## Install:      make install PREFIX=/usr/local
-## Tests:        make test
-## Clean:        make clean
+## Run `make help` for a list of targets and variables.
 
 CC      ?= gcc
 CFLAGS  ?= -O2 -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation \
@@ -15,9 +11,9 @@ LDLIBS  ?= -lpthread
 SRC_DIR := src
 BIN     := socketTool
 
-# language: en (default) or zh
-LANG    ?= zh
-ifeq ($(LANG),zh)
+# UI language: en (default) or zh — set explicitly to override
+UILANG  ?= en
+ifeq ($(UILANG),zh)
 CFLAGS  += -DST_LANG_ZH=1
 else
 CFLAGS  += -DST_LANG_EN=1
@@ -39,9 +35,21 @@ PREFIX     ?= /usr/local
 BINDIR     := $(PREFIX)/bin
 COMPDIR    := $(PREFIX)/share/bash-completion/completions
 
-.PHONY: all clean install uninstall links test
+.PHONY: all build help clean install uninstall links test setcap
 
-all: $(BIN)
+# colors for `make help` (only when stdout is a TTY)
+ifneq (,$(findstring xterm,$(TERM))$(findstring screen,$(TERM)))
+C_BOLD := \033[1m
+C_CYAN := \033[36m
+C_DIM  := \033[2m
+C_RST  := \033[0m
+endif
+
+all: build
+
+##@ Build
+
+build: $(BIN)  ## Build the socketTool binary (alias: make)
 
 $(BIN): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
@@ -49,13 +57,15 @@ $(BIN): $(OBJECTS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-links: $(BIN)
+links: $(BIN)  ## Create applet symlinks (tcp-client, bping, ...) in cwd
 	@for a in $(APPLETS); do \
 	  ln -sf $(BIN) $$a; \
 	  echo "  LN  $$a -> $(BIN)"; \
 	done
 
-install: $(BIN)
+##@ Install
+
+install: $(BIN)  ## Install binary, symlinks and bash-completion
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 0755 $(BIN) $(DESTDIR)$(BINDIR)/$(BIN)
 	@for a in $(APPLETS); do \
@@ -66,14 +76,44 @@ install: $(BIN)
 	install -m 0644 scripts/socketTool.bash-completion \
 	    $(DESTDIR)$(COMPDIR)/socketTool
 
-uninstall:
+uninstall:  ## Remove installed files
 	rm -f $(DESTDIR)$(BINDIR)/$(BIN)
 	@for a in $(APPLETS); do rm -f $(DESTDIR)$(BINDIR)/$$a; done
 	rm -f $(DESTDIR)$(COMPDIR)/socketTool
 
-test: $(BIN) links
+setcap: $(BIN)  ## Grant CAP_NET_RAW to ./socketTool (for native ICMP without root)
+	sudo setcap cap_net_raw+ep ./$(BIN)
+
+##@ Quality
+
+test: $(BIN) links  ## Run the full test suite (unit + e2e)
 	@bash tests/run_all.sh
 
-clean:
+clean:  ## Remove build artefacts and applet symlinks
 	rm -f $(OBJECTS) $(BIN)
 	@for a in $(APPLETS); do rm -f $$a; done
+
+##@ Help
+
+help:  ## Print this help
+	@printf "$(C_BOLD)socketTool — multi-protocol network test toolkit$(C_RST)\n\n"
+	@printf "$(C_BOLD)Usage:$(C_RST)\n  make $(C_CYAN)<target>$(C_RST) [VAR=value ...]\n\n"
+	@awk 'BEGIN { FS = ":.*##"; cur="" }                                      \
+	     /^##@/ { sub(/^##@ */, ""); printf "\n$(C_BOLD)%s$(C_RST)\n", $$0 }  \
+	     /^[a-zA-Z0-9_.\/-]+:.*##/ {                                          \
+	       printf "  $(C_CYAN)%-14s$(C_RST) %s\n", $$1, $$2                   \
+	     }' $(MAKEFILE_LIST)
+	@printf "\n$(C_BOLD)Variables:$(C_RST)\n"
+	@printf "  $(C_CYAN)%-18s$(C_RST) %s\n" \
+	    "UILANG=zh|en"      "compile-time UI language (default: $(UILANG))" \
+	    "PREFIX=/usr/local" "install prefix (default: $(PREFIX))"           \
+	    "DESTDIR="          "staging dir prepended to PREFIX during install"\
+	    "CC=gcc"            "C compiler"                                    \
+	    "CFLAGS=..."        "extra C flags"
+	@printf "\n$(C_BOLD)Examples:$(C_RST)\n"
+	@printf "  $(C_DIM)make$(C_RST)                       # build (UI lang = $(UILANG))\n"
+	@printf "  $(C_DIM)make UILANG=zh$(C_RST)             # build with Chinese UI\n"
+	@printf "  $(C_DIM)make links$(C_RST)                 # create applet symlinks\n"
+	@printf "  $(C_DIM)make setcap$(C_RST)                # enable native ICMP for non-root\n"
+	@printf "  $(C_DIM)make test$(C_RST)                  # run all tests\n"
+	@printf "  $(C_DIM)make install PREFIX=/opt/st$(C_RST)\n\n"
