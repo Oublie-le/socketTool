@@ -30,6 +30,7 @@ static void tcp_client_help(void)
            "  -i, --interactive     interactive mode (stdin <-> socket)\n"
            "  -t, --timeout MS      connect timeout (%s 5000)\n"
            "  -c, --count N         send the message N times then exit\n"
+           "  -B, --bench SECS      throughput benchmark: spam data for SECS seconds\n"
            "  -h, --help            %s\n",
            T(T_USAGE), T(T_OPTIONS), T(T_REQUIRED), T(T_REQUIRED),
            T(T_DEFAULT), T(T_HELP));
@@ -65,16 +66,17 @@ static int tcp_pump(int fd)
 int tcp_client_main(int argc, char **argv)
 {
     const char *host = NULL, *port = NULL, *msg = NULL;
-    int interactive = 0, timeout = 5000, count = 1;
+    int interactive = 0, timeout = 5000, count = 1, bench = 0;
 
     static struct option opts[] = {
         {"host", 1, 0, 'H'}, {"port", 1, 0, 'p'},
         {"message", 1, 0, 'm'}, {"interactive", 0, 0, 'i'},
         {"timeout", 1, 0, 't'}, {"count", 1, 0, 'c'},
+        {"bench", 1, 0, 'B'},
         {"help", 0, 0, 'h'}, {0,0,0,0},
     };
     int c;
-    while ((c = getopt_long(argc, argv, "H:p:m:it:c:h", opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "H:p:m:it:c:B:h", opts, NULL)) != -1) {
         switch (c) {
         case 'H': host = optarg; break;
         case 'p': port = optarg; break;
@@ -82,6 +84,7 @@ int tcp_client_main(int argc, char **argv)
         case 'i': interactive = 1; break;
         case 't': timeout = atoi(optarg); break;
         case 'c': count = atoi(optarg); break;
+        case 'B': bench = atoi(optarg); break;
         case 'h': tcp_client_help(); return 0;
         default: tcp_client_help(); return 1;
         }
@@ -93,11 +96,33 @@ int tcp_client_main(int argc, char **argv)
     ui_section(ui_icon_globe(), "TCP client");
     ui_kv(T(T_TARGET),     "%s%s:%s%s", UI_BCYAN, host, port, UI_RESET);
     ui_kv(T(T_TIMEOUT_MS), "%d ms", timeout);
+    if (bench > 0) ui_kv("bench", "%d s", bench);
 
     long t0 = now_ms();
     int fd = tcp_connect(host, port, timeout);
     if (fd < 0) { ui_err(T(T_E_CONNECT), strerror(errno)); return 2; }
     ui_ok(T(T_CONNECTED_IN), now_ms() - t0);
+
+    if (bench > 0) {
+        /* fire-hose send fixed-size buffer until deadline; count bytes */
+        char buf[65536];
+        for (size_t i = 0; i < sizeof(buf); i++) buf[i] = 'A' + (i & 31);
+        long deadline = now_ms() + (long)bench * 1000;
+        long long total = 0;
+        long ts = now_ms();
+        while (!g_stop && now_ms() < deadline) {
+            ssize_t w = send(fd, buf, sizeof(buf), 0);
+            if (w <= 0) break;
+            total += w;
+        }
+        long te = now_ms();
+        double secs = (te - ts) / 1000.0;
+        double mbps = secs > 0 ? (total * 8.0 / 1e6) / secs : 0;
+        ui_ok("bench: %.2f MB in %.2fs  = %s%.2f Mbps%s",
+              total / 1048576.0, secs, UI_BGREEN, mbps, UI_RESET);
+        close(fd);
+        return 0;
+    }
 
     if (msg) {
         for (int i = 0; i < count && !g_stop; i++) {
@@ -142,13 +167,30 @@ static void serve_one(int cfd, struct sockaddr_storage *peer, int echo)
     ui_ok(T(T_ACCEPTED), host, serv);
 
     char buf[4096];
+    long long total = 0;
+    long last_report = now_ms();
     for (;;) {
         ssize_t n = recv(cfd, buf, sizeof(buf), 0);
         if (n <= 0) break;
-        fprintf(stdout, "%s%s%s %.*s%s\n",
-                UI_BMAGENTA, ui_icon_recv(), UI_RESET, (int)n, buf,
-                buf[n-1] == '\n' ? "" : "");
-        if (echo) send(cfd, buf, n, 0);
+        if (echo) {
+            fprintf(stdout, "%s%s%s %.*s%s\n",
+                    UI_BMAGENTA, ui_icon_recv(), UI_RESET, (int)n, buf,
+                    buf[n-1] == '\n' ? "" : "");
+            send(cfd, buf, n, 0);
+        } else {
+            total += n;
+            long now = now_ms();
+            if (now - last_report >= 1000) {
+                fprintf(stdout, "%s%s%s %s:%s %lld bytes\n",
+                        UI_BMAGENTA, ui_icon_recv(), UI_RESET,
+                        host, serv, total);
+                last_report = now;
+            }
+        }
+    }
+    if (!echo && total > 0) {
+        fprintf(stdout, "%s%s%s %s:%s total %lld bytes\n",
+                UI_BMAGENTA, ui_icon_recv(), UI_RESET, host, serv, total);
     }
     ui_info(T(T_CLOSED), host, serv);
     close(cfd);
