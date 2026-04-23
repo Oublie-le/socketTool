@@ -12,7 +12,5 @@
         return 2; \
     }
 
-STUB(ws_client_main)
-STUB(ws_server_main)
 STUB(bping_main)
 STUB(btest_main)
