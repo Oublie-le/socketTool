@@ -1,0 +1,24 @@
+src/applets/ws.c
+  5aa3148606a844b7 28-29,302-320,323-325,328-356
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.10",
+  "base_commit_sha": "71bc882114a398b4e4281e697eaf52ff53f91488",
+  "prompts": {
+    "5aa3148606a844b7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7beaa246-4276-4c60-af13-8cc5c2644bc1",
+        "model": "claude-opus-4.7"
+      },
+      "human_author": "fengpijie",
+      "messages": [],
+      "total_additions": 53,
+      "total_deletions": 7,
+      "accepted_lines": 53,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/9d6aa28176698464feabf5bfb4f1d0801070262d525915a7dc36225326b3b2e4"
+    }
+  }
+}
