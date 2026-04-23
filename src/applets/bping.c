@@ -18,9 +18,9 @@
 #include <pthread.h>
 #include <sys/wait.h>
 
-#include "applet.h"
-#include "ui.h"
-#include "util.h"
+#include "core/applet.h"
+#include "ui/ui.h"
+#include "net/net.h"
 
 struct host {
     char       name[128];

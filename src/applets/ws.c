@@ -20,9 +20,9 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-#include "applet.h"
-#include "ui.h"
-#include "util.h"
+#include "core/applet.h"
+#include "ui/ui.h"
+#include "net/net.h"
 
 static volatile int g_stop;
 

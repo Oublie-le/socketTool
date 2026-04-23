@@ -9,9 +9,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "applet.h"
-#include "ui.h"
-#include "util.h"
+#include "core/applet.h"
+#include "ui/ui.h"
+#include "net/net.h"
 
 int main(int argc, char **argv)
 {

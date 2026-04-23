@@ -19,7 +19,7 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
-#include "util.h"
+#include "net/net.h"
 
 const char *base_name(const char *path)
 {

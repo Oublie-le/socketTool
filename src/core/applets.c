@@ -4,8 +4,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "applet.h"
-#include "ui.h"
+#include "core/applet.h"
+#include "ui/ui.h"
 
 const struct applet applets[] = {
     { "tcp-client", tcp_client_main, "TCP client: connect & exchange data" },

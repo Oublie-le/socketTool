@@ -7,7 +7,7 @@
 #include <stdarg.h>
 #include <unistd.h>
 
-#include "ui.h"
+#include "ui/ui.h"
 
 int ui_color_enabled = 1;
 

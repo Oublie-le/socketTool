@@ -14,9 +14,9 @@
 #include <pthread.h>
 #include <sys/socket.h>
 
-#include "applet.h"
-#include "ui.h"
-#include "util.h"
+#include "core/applet.h"
+#include "ui/ui.h"
+#include "net/net.h"
 
 enum { P_TCP, P_UDP, P_WS };
 
