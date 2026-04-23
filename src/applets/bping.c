@@ -27,12 +27,15 @@
 #include "core/applet.h"
 #include "ui/ui.h"
 #include "net/net.h"
+#include "net/discover.h"
 #include "i18n/i18n.h"
 
 struct host {
     char       name[128];        /* original target (e.g. "192.168.1.10") */
     char       ip[16];           /* resolved IPv4 dotted */
-    char       hostname[128];    /* reverse DNS, or "" if same as IP */
+    char       hostname[128];    /* rDNS / mDNS / NBNS, or "" if all failed */
+    char       hostname_src[8];  /* "dns" | "mdns" | "nbns" | ""           */
+    char       mac[20];          /* from /proc/net/arp, or "" */
     int        ok;
     long       rtt_ms;
     char       err[64];
@@ -42,6 +45,7 @@ struct bping_cfg {
     int        timeout_ms;
     int        mode_icmp;
     int        no_rdns;
+    int        no_discover;       /* skip mDNS / NBNS / ARP */
     const char *port;
 };
 
@@ -98,10 +102,30 @@ static void *worker(void *p)
                    snprintf(h->err, sizeof(h->err), "%s", strerror(errno)); }
         }
 
-        if (!w->cfg->no_rdns && h->ok && h->ip[0] && h->ip[0] != '?') {
-            if (reverse_dns(h->ip, h->hostname, sizeof(h->hostname)) != 0
-                || strcmp(h->hostname, h->ip) == 0)
+        if (h->ok && h->ip[0] && h->ip[0] != '?') {
+            /* 1) DNS PTR */
+            if (!w->cfg->no_rdns &&
+                reverse_dns(h->ip, h->hostname, sizeof(h->hostname)) == 0 &&
+                strcmp(h->hostname, h->ip) != 0) {
+                snprintf(h->hostname_src, sizeof(h->hostname_src), "dns");
+            } else {
                 h->hostname[0] = '\0';
+            }
+            /* 2) mDNS (Apple/Avahi) */
+            if (!h->hostname[0] && !w->cfg->no_discover) {
+                if (mdns_lookup(h->ip, 200,
+                                h->hostname, sizeof(h->hostname)) == 0)
+                    snprintf(h->hostname_src, sizeof(h->hostname_src), "mdns");
+            }
+            /* 3) NBNS (Windows/Samba) */
+            if (!h->hostname[0] && !w->cfg->no_discover) {
+                if (nbns_lookup(h->ip, 200,
+                                h->hostname, sizeof(h->hostname)) == 0)
+                    snprintf(h->hostname_src, sizeof(h->hostname_src), "nbns");
+            }
+            /* 4) MAC from ARP table (kernel cached after our ICMP probe) */
+            if (!w->cfg->no_discover)
+                arp_lookup(h->ip, h->mac, sizeof(h->mac));
         }
 
         pthread_mutex_lock(&w->lock);
@@ -129,6 +153,7 @@ static void bping_help(void)
            "  -t, --timeout MS      per-host timeout (default 1500)\n"
            "  -j, --jobs N          parallel workers (default 32)\n"
            "  -n, --no-rdns         skip reverse-DNS lookup\n"
+           "  -D, --no-discover     skip mDNS / NetBIOS / ARP discovery\n"
            "  -h, --help            show this help\n"
            "\n"
            "  ICMP mode requires raw-socket privileges:\n"
@@ -140,16 +165,17 @@ int bping_main(int argc, char **argv)
 {
     const char *file = NULL;
     struct bping_cfg cfg = { .timeout_ms = 1500, .mode_icmp = 0,
-                             .no_rdns = 0, .port = "80" };
+                             .no_rdns = 0, .no_discover = 0, .port = "80" };
     int jobs = 32;
 
     static struct option opts[] = {
         {"file",1,0,'f'},{"mode",1,0,'m'},{"port",1,0,'p'},
         {"timeout",1,0,'t'},{"jobs",1,0,'j'},{"no-rdns",0,0,'n'},
+        {"no-discover",0,0,'D'},
         {"help",0,0,'h'},{0,0,0,0},
     };
     int c;
-    while ((c = getopt_long(argc, argv, "f:m:p:t:j:nh", opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "f:m:p:t:j:nDh", opts, NULL)) != -1) {
         switch (c) {
         case 'f': file = optarg; break;
         case 'm':
@@ -161,6 +187,7 @@ int bping_main(int argc, char **argv)
         case 't': cfg.timeout_ms = atoi(optarg); break;
         case 'j': jobs = atoi(optarg); break;
         case 'n': cfg.no_rdns = 1; break;
+        case 'D': cfg.no_discover = 1; break;
         case 'h': bping_help(); return 0;
         default:  bping_help(); return 1;
         }
@@ -217,29 +244,32 @@ int bping_main(int argc, char **argv)
     long elapsed = now_ms() - t0;
     ui_progress_done();
 
-    /* output table — wider columns to fit IP + hostname */
+    /* output table */
     const char *cols[]   = {
-        T(T_TARGET), T(T_IP), T(T_HOSTNAME), T(T_RESULT), T(T_RTT), T(T_INFO)
+        T(T_TARGET), T(T_IP), T(T_HOSTNAME), "src", "mac",
+        T(T_RESULT), T(T_RTT), T(T_INFO)
     };
-    const int   widths[] = { 22, 15, 28, 6, 8, 22 };
+    const int   widths[] = { 18, 15, 24, 4, 17, 6, 7, 18 };
     putchar('\n');
-    ui_table_header(cols, widths, 6);
+    ui_table_header(cols, widths, 8);
 
     int ok = 0, fail = 0;
     for (int i = 0; i < n; i++) {
         char rttbuf[16]; snprintf(rttbuf, sizeof(rttbuf), "%ld", hosts[i].rtt_ms);
         const char *cells[] = {
             hosts[i].name,
-            hosts[i].ip[0]       ? hosts[i].ip       : "-",
-            hosts[i].hostname[0] ? hosts[i].hostname : "-",
+            hosts[i].ip[0]           ? hosts[i].ip           : "-",
+            hosts[i].hostname[0]     ? hosts[i].hostname     : "-",
+            hosts[i].hostname_src[0] ? hosts[i].hostname_src : "-",
+            hosts[i].mac[0]          ? hosts[i].mac          : "-",
             hosts[i].ok ? "OK" : "FAIL",
             rttbuf,
             hosts[i].ok ? "" : hosts[i].err,
         };
-        ui_table_row(cells, widths, 6, hosts[i].ok ? UI_BGREEN : UI_BRED);
+        ui_table_row(cells, widths, 8, hosts[i].ok ? UI_BGREEN : UI_BRED);
         hosts[i].ok ? ok++ : fail++;
     }
-    ui_table_sep(widths, 6);
+    ui_table_sep(widths, 8);
 
     putchar('\n');
     ui_kv(T(T_OK_LBL),   "%s%s %d%s", UI_BGREEN, ui_icon_ok(), ok, UI_RESET);
