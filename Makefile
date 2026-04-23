@@ -16,7 +16,7 @@ SRC_DIR := src
 BIN     := socketTool
 
 # language: en (default) or zh
-LANG    ?= en
+LANG    ?= zh
 ifeq ($(LANG),zh)
 CFLAGS  += -DST_LANG_ZH=1
 else
