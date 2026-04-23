@@ -19,9 +19,15 @@
 - **批量 ping**：支持 **单 IP / 范围 (`192.168.1.10-50`) / 完整范围 (`a-b`) / CIDR (`10.0.0.0/24`) / 主机列表文件**；**原生 C 实现的 ICMP**（无需 `/bin/ping`），亦支持 TCP-ping
 - **结果含主机信息**：`bping` 结果表格列出 target / 解析 IP / 反向 DNS hostname / 状态 / 时延 / 备注
 - **批量协议测试**：`btest` 多线程并发对多个 `host:port[:proto]` 检测
+- **吞吐基准** (tcp/udp 客户端 `-B SECS`)：iperf 风格一次性带宽测速，配合 server `-d` 使用
+- **内网主机发现** (bping)：每条结果自动补齐 rDNS / mDNS / NetBIOS 主机名 + ARP MAC，列为 `ip / hostname / src / mac / rtt`
+- **多种输出** (bping)：`-o table|json|csv`，`--watch SECS` 可持续刷新的监控面板
+- **本机自检**：`diag` 展示网卡、默认网关、DNS、MTU 并对网关 / 1.1.1.1 / 8.8.8.8 做 TCP 连通性探测
+- **主机别名**：`~/.socketToolrc` 里写 `router 192.168.1.1` / `db=db.internal:5432`，之后 `-H @router` 自动展开
 - **中英文双语**：编译期 `make UILANG=zh|en`，运行期 `--lang zh|en` 或 `ST_LANG` 环境变量
 - **美观 CLI**：Unicode 图标 (✔ ✘ ⚠ ℹ ◀ ▶ ⏱ 🚀 🌐)、亮色调色板、CJK 宽度对齐
 - **Tab 补全**：随安装一同部署 bash completion，支持子命令、选项、模式枚举、文件名
+- **质量目标**：`make lint`（cppcheck）、`make coverage`（gcov/lcov HTML），配合 GitHub Actions CI（en/zh 双构建 + 全量测试）
 - **完整测试套件**：`make test` 一键回归 (range 单测 + 各 applet 端到端)
 
 ---
@@ -111,6 +117,7 @@ tcp-client -H 192.168.1.10 -p 8080
 | `ws-server`   | WebSocket 服务端                                    |
 | `bping`       | 批量 ping（**单点 / 范围 / CIDR / 文件**，TCP/ICMP）|
 | `btest`       | 批量协议连通性测试（TCP / UDP / WS）                |
+| `diag`        | 本机网络自检（网卡 / 网关 / DNS / MTU）             |
 
 ### 示例
 
@@ -176,6 +183,45 @@ socketTool bping -m icmp 8.8.8.8 1.1.1.1
 ```bash
 socketTool btest 192.168.1.10:80:tcp 192.168.1.10:53:udp 192.168.1.10:8080:ws
 socketTool btest -f examples/targets.txt -P tcp -j 32
+```
+
+#### 吞吐基准（iperf 风格）
+
+```bash
+# 服务端进 discard 降噪
+socketTool tcp-server -p 9000 -d &
+socketTool tcp-client -H 127.0.0.1 -p 9000 -B 5           # 连发 5 秒测 Mbps
+
+# UDP 版（1400 字节 MTU 安全 datagram）
+socketTool udp-server -p 9001 -d &
+socketTool udp-client -H 127.0.0.1 -p 9001 -B 5
+```
+
+#### 本机网络自检
+
+```bash
+socketTool diag
+# 输出：网卡 / 默认路由 / 域名解析 / MTU / 网关 & 公网 DNS 探测
+```
+
+#### 主机别名（~/.socketToolrc）
+
+```bash
+cat > ~/.socketToolrc <<EOF
+# 名字   host[:port]
+router   192.168.1.1
+db=db.internal:5432
+EOF
+socketTool tcp-client -H @router -p 80
+socketTool tcp-client -H @db              # 自动读取别名里的端口
+```
+
+#### bping — JSON / CSV / 定时扫
+
+```bash
+socketTool bping -o json 192.168.1.0/24      > hosts.json
+socketTool bping -o csv  -f examples/hosts.txt > hosts.csv
+socketTool bping -W 5    192.168.1.0/24      # 每 5 秒重扫 (Ctrl-C 停)
 ```
 
 ---

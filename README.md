@@ -28,11 +28,23 @@ resource-constrained Linux devices.
 - **Reverse DNS** column: ping results show the resolved hostname for each IP
 - **Batch protocol test**: `btest` runs concurrent TCP / UDP / WS probes against
   many `host:port[:proto]` targets
+- **Throughput bench** (`-B SECS` on tcp/udp clients): iperf-style one-shot
+  Mbps measurement against a server in `discard` mode (`-d`)
+- **LAN discovery for bping**: each host row resolves to rDNS / mDNS / NetBIOS
+  hostname + MAC (from ARP), with columns `ip / hostname / src / mac / rtt`
+- **Output formats** (bping): `-o table|json|csv` plus `--watch SECS` for
+  continuous re-scan dashboards
+- **Local self-check**: `diag` reports interfaces, default route, resolvers,
+  MTU and runs a few TCP reachability probes (gateway / 1.1.1.1 / 8.8.8.8)
+- **Host aliases**: `~/.socketToolrc` maps `@name` → `host[:port]` (e.g.
+  `router 192.168.1.1`, `db=db.internal:5432`), usable on every `-H`
 - **Bilingual UI**: compile-time `make UILANG=zh|en`; runtime `--lang zh|en`
   or `ST_LANG` env var
 - **Pretty CLI**: Unicode icons (✔ ✘ ⚠ ℹ ◀ ▶ ⏱ 🚀 🌐), bright color palette,
   CJK-width-aware tables, ASCII fallback on non-UTF-8 terminals
 - **Bash tab completion** for all sub-commands, options, and enum values
+- **Quality targets**: `make lint` (cppcheck), `make coverage` (gcov/lcov HTML),
+  plus GitHub Actions CI (EN/ZH build + full test matrix)
 - **Test suite**: `make test` runs both C unit tests and end-to-end shell tests
 
 ---
@@ -107,6 +119,7 @@ Run `socketTool` with no arguments to see the colored applet list, or
 | `ws-server`   | WebSocket server                                         |
 | `bping`       | Batch ping (single / range / CIDR / file, ICMP \| TCP)   |
 | `btest`       | Batch protocol connectivity test (TCP / UDP / WS)        |
+| `diag`        | Local network self-check (interfaces / gateway / DNS / MTU) |
 
 ### Examples
 
@@ -152,6 +165,45 @@ socketTool bping -p 22 -j 64 -t 800 \
 ```bash
 socketTool btest 192.168.1.10:80:tcp 192.168.1.10:53:udp 192.168.1.10:8080:ws
 socketTool btest -f examples/targets.txt -P tcp -j 32
+```
+
+#### Throughput bench (iperf-style)
+
+```bash
+# server in discard mode (low-noise)
+socketTool tcp-server -p 9000 -d &
+socketTool tcp-client -H 127.0.0.1 -p 9000 -B 5           # 5-second bench
+
+# UDP equivalent (1400-byte MTU-safe datagrams)
+socketTool udp-server -p 9001 -d &
+socketTool udp-client -H 127.0.0.1 -p 9001 -B 5
+```
+
+#### Local network self-check
+
+```bash
+socketTool diag
+# reports: interfaces / default route / resolvers / MTU / a few TCP probes
+```
+
+#### Host aliases (~/.socketToolrc)
+
+```bash
+cat > ~/.socketToolrc <<EOF
+# name  host[:port]
+router  192.168.1.1
+db=db.internal:5432
+EOF
+socketTool tcp-client -H @router -p 80
+socketTool tcp-client -H @db                # port picked from alias
+```
+
+#### bping — JSON / CSV / watch
+
+```bash
+socketTool bping -o json 192.168.1.0/24      > hosts.json
+socketTool bping -o csv  -f examples/hosts.txt > hosts.csv
+socketTool bping -W 5    192.168.1.0/24      # re-scan every 5s (Ctrl-C)
 ```
 
 ---
