@@ -1,0 +1,26 @@
+src/tcp.c
+  673f52fdda72fb43 1-203
+README.md
+  673f52fdda72fb43 72,94-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.9",
+  "base_commit_sha": "cf702bb8b2e303a5486e7beb8802776632a272b0",
+  "prompts": {
+    "673f52fdda72fb43": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "098278e7-0eed-4e6c-9147-bd5ffa068038",
+        "model": "claude-opus-4.7"
+      },
+      "human_author": "fengpijie",
+      "messages": [],
+      "total_additions": 221,
+      "total_deletions": 20,
+      "accepted_lines": 206,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/30f02c5ee531ddc47a135393879dd8a342bd4ec332d917cadd461b198c6930e2"
+    }
+  }
+}
