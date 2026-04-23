@@ -12,5 +12,4 @@
         return 2; \
     }
 
-STUB(bping_main)
 STUB(btest_main)
