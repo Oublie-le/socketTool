@@ -1,0 +1,115 @@
+# socketTool — bash completion
+#
+# Install:
+#   make install                # installs to $PREFIX/share/bash-completion/completions
+#   or manually:
+#   . scripts/socketTool.bash-completion
+#
+# Provides tab-completion for:
+#   - the main binary `socketTool` (subcommand + options)
+#   - each applet symlink (tcp-client, tcp-server, ..., bping, btest)
+
+_socketTool_applets='tcp-client tcp-server udp-client udp-server ws-client ws-server bping btest'
+_socketTool_global='--lang --no-color -V --version -h --help'
+
+# Common option lists per applet
+_socketTool_opts_tcp_client='-H --host -p --port -m --message -i --interactive -t --timeout -c --count -h --help'
+_socketTool_opts_tcp_server='-H --host -p --port -e --echo -d --discard -1 --once -h --help'
+_socketTool_opts_udp_client='-H --host -p --port -m --message -c --count -i --interval -w --wait -h --help'
+_socketTool_opts_udp_server='-H --host -p --port -e --echo -d --discard -h --help'
+_socketTool_opts_ws_client='-H --host -p --port -P --path -m --message -i --interactive -t --timeout -h --help'
+_socketTool_opts_ws_server='-H --host -p --port -e --echo -1 --once -h --help'
+_socketTool_opts_bping='-f --file -m --mode -p --port -t --timeout -j --jobs -h --help'
+_socketTool_opts_btest='-f --file -P --proto -t --timeout -j --jobs -h --help'
+
+# Look up the option list for a given applet name
+_socketTool_opts_for() {
+    local var="_socketTool_opts_${1//-/_}"
+    echo "${!var}"
+}
+
+# Common: list /etc/hosts hostnames + 127.0.0.1 / localhost
+_socketTool_hosts() {
+    local h='localhost 127.0.0.1 0.0.0.0'
+    if [ -r /etc/hosts ]; then
+        h="$h $(awk '/^[^#]/ {for (i=2;i<=NF;i++) print $i}' /etc/hosts 2>/dev/null \
+                | head -n 50 | tr '\n' ' ')"
+    fi
+    echo "$h"
+}
+
+# Generic completion based on $1 = applet name
+_socketTool_complete_applet() {
+    local applet=$1 cur prev opts
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    case "$prev" in
+        -H|--host)
+            COMPREPLY=( $(compgen -W "$(_socketTool_hosts)" -- "$cur") )
+            return 0 ;;
+        -f|--file)
+            COMPREPLY=( $(compgen -f -- "$cur") )
+            return 0 ;;
+        -m|--mode)     # bping mode
+            if [ "$applet" = "bping" ]; then
+                COMPREPLY=( $(compgen -W "tcp icmp" -- "$cur") )
+                return 0
+            fi ;;
+        -P|--proto)    # btest proto
+            if [ "$applet" = "btest" ]; then
+                COMPREPLY=( $(compgen -W "tcp udp ws" -- "$cur") )
+                return 0
+            fi ;;
+        --lang)
+            COMPREPLY=( $(compgen -W "en zh" -- "$cur") )
+            return 0 ;;
+    esac
+
+    opts="$(_socketTool_opts_for "$applet") $_socketTool_global"
+    if [[ "$cur" == -* ]]; then
+        COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
+    fi
+}
+
+# Completion for the main `socketTool` binary
+_socketTool_complete_main() {
+    local cur prev
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # If we are still on the first non-flag word, it must be a subcommand
+    local cmd=""
+    local i
+    for ((i=1; i<COMP_CWORD; i++)); do
+        case "${COMP_WORDS[i]}" in
+            --lang) ((i++));;
+            -*) ;;
+            *) cmd="${COMP_WORDS[i]}"; break ;;
+        esac
+    done
+
+    if [ -z "$cmd" ]; then
+        if [[ "$cur" == -* ]]; then
+            COMPREPLY=( $(compgen -W "$_socketTool_global" -- "$cur") )
+        else
+            COMPREPLY=( $(compgen -W "$_socketTool_applets" -- "$cur") )
+        fi
+        return 0
+    fi
+
+    _socketTool_complete_applet "$cmd"
+}
+
+# Per-applet completion (when invoked via symlink)
+_socketTool_complete_symlink() {
+    local applet
+    applet="$(basename "${COMP_WORDS[0]}")"
+    _socketTool_complete_applet "$applet"
+}
+
+complete -F _socketTool_complete_main    socketTool
+complete -F _socketTool_complete_symlink tcp-client tcp-server \
+                                         udp-client udp-server \
+                                         ws-client  ws-server  \
+                                         bping btest
