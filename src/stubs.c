@@ -12,8 +12,6 @@
         return 2; \
     }
 
-STUB(tcp_client_main)
-STUB(tcp_server_main)
 STUB(udp_client_main)
 STUB(udp_server_main)
 STUB(ws_client_main)

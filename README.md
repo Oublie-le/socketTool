@@ -69,7 +69,7 @@ ln -s socketTool bping
 socketTool <applet> [options]
 
 # 方式二：通过软链接的 applet 名直接调用
-tcp-client -h 192.168.1.10 -p 8080
+tcp-client -H 192.168.1.10 -p 8080
 ```
 
 ### 子命令一览
@@ -91,8 +91,8 @@ tcp-client -h 192.168.1.10 -p 8080
 # 启动一个 TCP 服务端
 socketTool tcp-server -p 9000
 
-# TCP 客户端发送数据
-socketTool tcp-client -h 192.168.1.10 -p 9000 -m "hello"
+# TCP client sends data
+socketTool tcp-client -H 192.168.1.10 -p 9000 -m "hello"
 
 # 批量 ping 一个设备列表
 socketTool bping -f hosts.txt
