@@ -12,6 +12,13 @@ ws-client
 ws-server
 bping
 btest
+diag
+
+# coverage
+*.gcda
+*.gcno
+coverage/
+coverage.info
 
 # editor
 *.swp
