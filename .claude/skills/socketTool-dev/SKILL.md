@@ -136,18 +136,17 @@ make clean && make test
 
 **每完成一个独立模块/能力就提交一次，禁止把多个无关改动攒到一个 commit。**
 
-### Commit message 模板（仓库强制，pre-commit 会校验）
+### Commit message 格式（一行即可）
 
 ```
-[修改类型] 标题（不超过 20 个汉字 / 80 个字符）
-[原因分析] 做这个修改的动机
-[影响范围] 1.技术栈: 网络 2.影响模块: <层/模块名> 3.是否平台问题: 否 4.风险程度: 低|中|高
-[bug_id] <JIRA 号或 N/A>
+[修改类型] 简短描述
+```
 
-- 条目 1
-- 条目 2
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+示例：
+```
+[bugfix] ws-client 不传 -m 时立即断开 -> 默认进入交互模式
+[feature] bping 支持 IP 范围与 CIDR 展开
+[config] 调整默认 UI 语言为 en
 ```
 
 ### 修改类型
@@ -164,7 +163,9 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 - [ ] 新 applet 已在 `core/applets.c` 注册
 - [ ] 新选项已更新到 `scripts/socketTool.bash-completion`
 - [ ] 如涉及用法变化，README.md + README.zh.md **同步更新**
-- [ ] 不推送到 remote（除非用户明确要求 `git push`）
+
+### 推送
+用户明确要求时执行 `git push`，不需要再额外确认。
 
 ---
 
