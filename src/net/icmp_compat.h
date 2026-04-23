@@ -31,7 +31,6 @@ typedef struct icmp icmp_hdr_t;
 
 #else
 /* Linux */
-#include <netinet/icmp.h>
 #include <netinet/ip_icmp.h>
 
 #define ICMP_TYPE type
