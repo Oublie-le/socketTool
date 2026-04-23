@@ -9,7 +9,7 @@ typedef int (*applet_main_fn)(int argc, char **argv);
 struct applet {
     const char    *name;
     applet_main_fn main;
-    const char    *summary;
+    int            summary_key;   /* i18n key, see i18n/i18n.h */
 };
 
 extern const struct applet applets[];
