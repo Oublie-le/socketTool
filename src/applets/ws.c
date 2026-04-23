@@ -253,6 +253,8 @@ int ws_client_main(int argc, char **argv)
     }
     if (!host || !port) { ws_client_help(); return 1; }
 
+    alias_apply_host(&host, &port);
+
     install_sigint(&g_stop);
     srand((unsigned)time(NULL) ^ getpid());
 

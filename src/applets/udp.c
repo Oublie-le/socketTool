@@ -61,6 +61,8 @@ int udp_client_main(int argc, char **argv)
     }
     if (!host || !port) { udp_client_help(); return 1; }
 
+    alias_apply_host(&host, &port);
+
     install_sigint(&g_stop);
 
     int fd = udp_socket(host, port, 0);

@@ -75,4 +75,19 @@ int icmp_ping_once(const char *host, int identifier, int sequence,
  */
 int reverse_dns(const char *ip, char *out, size_t outlen);
 
+/*
+ * Host-alias resolver. Reads ~/.socketToolrc once (format: "name host[:port]"
+ * or "name=host[:port]" per line, '#' comments).
+ *
+ * resolve_alias: if "name" matches, sets out host/port to static strings
+ * owned by the alias table. port may be left NULL if the alias did not
+ * specify one. Returns 1 on match, 0 otherwise.
+ *
+ * alias_apply_host: convenience wrapper for the CLI. If the incoming host
+ * starts with '@', looks up the rest as an alias and rewrites host/port
+ * in place.
+ */
+int  alias_resolve(const char *name, const char **host, const char **port);
+void alias_apply_host(const char **host, const char **port);
+
 #endif

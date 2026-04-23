@@ -91,6 +91,8 @@ int tcp_client_main(int argc, char **argv)
     }
     if (!host || !port) { tcp_client_help(); return 1; }
 
+    alias_apply_host(&host, &port);
+
     install_sigint(&g_stop);
 
     ui_section(ui_icon_globe(), "TCP client");
