@@ -1,0 +1,7 @@
+# btest 目标列表示例
+# 每行一个 target：host:port[:proto]
+# proto 可省略 (使用 -P 指定的默认值)，或显式 tcp / udp / ws
+127.0.0.1:80:tcp
+127.0.0.1:53:udp
+echo.websocket.events:80:ws
+8.8.8.8:53:udp

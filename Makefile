@@ -5,7 +5,7 @@
 ## Clean:   make clean
 
 CC      ?= gcc
-CFLAGS  ?= -O2 -Wall -Wextra -Wno-unused-parameter -std=gnu99
+CFLAGS  ?= -O2 -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation -std=gnu99
 LDFLAGS ?=
 LDLIBS  ?= -lpthread
 
