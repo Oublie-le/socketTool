@@ -80,12 +80,20 @@ static void *worker(void *p)
 
 static void bping_help(void)
 {
-    printf("Usage: bping [-f hosts.txt] [host ...] [options]\n"
-           "  -f, --file FILE       read hosts from FILE (one per line, # comments)\n"
+    printf("Usage: bping [-f hosts.txt] [target ...] [options]\n"
+           "\n"
+           "  Each target may be:\n"
+           "    192.168.1.10                  single host\n"
+           "    192.168.1.10-50               last-octet range\n"
+           "    192.168.1.10-192.168.1.50     full IP range\n"
+           "    10.0.0.0/24                   CIDR (capped at 65536 hosts)\n"
+           "    host.example.com              hostname\n"
+           "\n"
+           "  -f, --file FILE       read targets from FILE (one per line, # comments)\n"
            "  -m, --mode MODE       'tcp' (default) or 'icmp'\n"
            "  -p, --port PORT       port for tcp mode (default 80)\n"
            "  -t, --timeout MS      per-host timeout (default 1500)\n"
-           "  -j, --jobs N          parallel workers (default 16)\n"
+           "  -j, --jobs N          parallel workers (default 32)\n"
            "  -h, --help            show this help\n");
 }
 
@@ -93,7 +101,7 @@ int bping_main(int argc, char **argv)
 {
     const char *file = NULL;
     struct bping_cfg cfg = { .timeout_ms = 1500, .mode_icmp = 0, .port = "80" };
-    int jobs = 16;
+    int jobs = 32;
 
     static struct option opts[] = {
         {"file",1,0,'f'},{"mode",1,0,'m'},{"port",1,0,'p'},
@@ -116,27 +124,34 @@ int bping_main(int argc, char **argv)
         }
     }
 
-    /* collect hosts */
+    /* collect hosts (with range/CIDR expansion) */
     int cap = 64, n = 0;
     struct host *hosts = calloc(cap, sizeof(*hosts));
+    int max_total = 65536;
+
+    #define ADD_EXPR(expr) do { \
+        char **list = NULL; \
+        int m = host_range_expand((expr), &list, max_total); \
+        if (m < 0) { ui_warn(T(T_E_BAD_RANGE), (expr)); break; } \
+        for (int j = 0; j < m; j++) { \
+            if (n >= cap) { cap *= 2; hosts = realloc(hosts, cap * sizeof(*hosts)); } \
+            memset(&hosts[n], 0, sizeof(hosts[n])); \
+            strncpy(hosts[n].name, list[j], sizeof(hosts[n].name) - 1); \
+            n++; \
+        } \
+        host_list_free(list, m); \
+    } while (0)
+
     if (file) {
         FILE *fp = fopen(file, "r");
-        if (!fp) { ui_err("open %s: %s", file, strerror(errno)); free(hosts); return 1; }
+        if (!fp) { ui_err(T(T_E_OPEN), file, strerror(errno)); free(hosts); return 1; }
         char buf[256];
-        while (read_line_strip(buf, sizeof(buf), fp)) {
-            if (n >= cap) { cap *= 2; hosts = realloc(hosts, cap * sizeof(*hosts)); }
-            memset(&hosts[n], 0, sizeof(hosts[n]));
-            snprintf(hosts[n].name, sizeof(hosts[n].name), "%s", buf);
-            n++;
-        }
+        while (read_line_strip(buf, sizeof(buf), fp)) ADD_EXPR(buf);
         fclose(fp);
     }
-    for (int i = optind; i < argc; i++) {
-        if (n >= cap) { cap *= 2; hosts = realloc(hosts, cap * sizeof(*hosts)); }
-        memset(&hosts[n], 0, sizeof(hosts[n]));
-        strncpy(hosts[n].name, argv[i], sizeof(hosts[n].name) - 1);
-        n++;
-    }
+    for (int i = optind; i < argc; i++) ADD_EXPR(argv[i]);
+    #undef ADD_EXPR
+
     if (n == 0) { bping_help(); free(hosts); return 1; }
 
     ui_section(ui_icon_rocket(), T(T_BATCH_PING));

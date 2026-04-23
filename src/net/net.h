@@ -33,4 +33,23 @@ long now_ms(void);
 /* install a SIGINT handler that flips *flag to 1 */
 void install_sigint(volatile int *flag);
 
+/*
+ * Expand a host expression to a list of IP/host strings.
+ *
+ * Supported forms:
+ *   "192.168.1.10"             single IPv4
+ *   "192.168.1.10-50"          last-octet range
+ *   "192.168.1.10-192.168.1.50" full IPv4 range
+ *   "10.0.0.0/24"              CIDR (caps at MAX hosts; default 4096)
+ *   "host.example.com"         single hostname
+ *
+ * On success returns >= 0 = number of hosts; *out is a malloc'd array of
+ * malloc'd strings (caller must free strings + array). On error returns -1.
+ *
+ * max_hosts: hard cap; if expansion would exceed, returns -1.
+ */
+int host_range_expand(const char *expr, char ***out, int max_hosts);
+
+void host_list_free(char **list, int n);
+
 #endif

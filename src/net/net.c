@@ -4,6 +4,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
@@ -183,4 +184,120 @@ void install_sigint(volatile int *flag)
     sa.sa_handler = on_sigint;
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+}
+
+/* ----------------------------------------------- host range expansion --- */
+
+static int parse_ipv4(const char *s, uint32_t *out)
+{
+    unsigned a, b, c, d; char x;
+    if (sscanf(s, "%u.%u.%u.%u%c", &a, &b, &c, &d, &x) != 4) return -1;
+    if (a > 255 || b > 255 || c > 255 || d > 255) return -1;
+    *out = (a << 24) | (b << 16) | (c << 8) | d;
+    return 0;
+}
+
+static char *ip_to_str(uint32_t ip)
+{
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%u.%u.%u.%u",
+             (ip >> 24) & 0xff, (ip >> 16) & 0xff,
+             (ip >> 8) & 0xff, ip & 0xff);
+    return strdup(buf);
+}
+
+static int append_host(char ***out, int *n, int *cap, char *s)
+{
+    if (*n >= *cap) {
+        *cap = *cap ? *cap * 2 : 16;
+        char **t = realloc(*out, *cap * sizeof(char *));
+        if (!t) { free(s); return -1; }
+        *out = t;
+    }
+    (*out)[(*n)++] = s;
+    return 0;
+}
+
+void host_list_free(char **list, int n)
+{
+    if (!list) return;
+    for (int i = 0; i < n; i++) free(list[i]);
+    free(list);
+}
+
+int host_range_expand(const char *expr, char ***out_list, int max_hosts)
+{
+    *out_list = NULL;
+    int n = 0, cap = 0;
+
+    /* CIDR ? */
+    const char *slash = strchr(expr, '/');
+    if (slash) {
+        char ip_part[32];
+        size_t k = (size_t)(slash - expr);
+        if (k >= sizeof(ip_part)) return -1;
+        memcpy(ip_part, expr, k); ip_part[k] = '\0';
+        int prefix = atoi(slash + 1);
+        if (prefix < 0 || prefix > 32) return -1;
+
+        uint32_t base;
+        if (parse_ipv4(ip_part, &base) < 0) return -1;
+        uint32_t mask  = prefix == 0 ? 0 : (~0u << (32 - prefix));
+        uint32_t net   = base & mask;
+        uint32_t bcast = net | ~mask;
+
+        /* /31 and /32 cover all addrs; otherwise skip net + bcast */
+        uint32_t lo = net, hi = bcast;
+        if (prefix < 31) { lo = net + 1; hi = bcast - 1; }
+        if (hi < lo) return -1;
+
+        uint64_t total = (uint64_t)hi - lo + 1;
+        if (total > (uint64_t)max_hosts) return -1;
+
+        for (uint32_t ip = lo; ; ip++) {
+            if (append_host(out_list, &n, &cap, ip_to_str(ip)) < 0)
+                goto fail;
+            if (ip == hi) break;
+        }
+        return n;
+    }
+
+    /* range with '-' ? */
+    const char *dash = strchr(expr, '-');
+    if (dash) {
+        char left[64], right[64];
+        size_t lk = (size_t)(dash - expr);
+        if (lk >= sizeof(left)) return -1;
+        memcpy(left, expr, lk); left[lk] = '\0';
+        snprintf(right, sizeof(right), "%s", dash + 1);
+
+        uint32_t a;
+        if (parse_ipv4(left, &a) < 0) return -1;
+
+        uint32_t b;
+        if (strchr(right, '.')) {
+            if (parse_ipv4(right, &b) < 0) return -1;
+        } else {
+            char *end; long last = strtol(right, &end, 10);
+            if (*end != '\0' || last < 0 || last > 255) return -1;
+            b = (a & 0xffffff00) | (uint32_t)last;
+        }
+        if (b < a) return -1;
+        if ((b - a + 1) > (uint64_t)max_hosts) return -1;
+
+        for (uint32_t ip = a; ; ip++) {
+            if (append_host(out_list, &n, &cap, ip_to_str(ip)) < 0) goto fail;
+            if (ip == b) break;
+        }
+        return n;
+    }
+
+    /* single host or hostname */
+    if (append_host(out_list, &n, &cap, strdup(expr)) < 0) goto fail;
+    return n;
+
+fail:
+    host_list_free(*out_list, n);
+    *out_list = NULL;
+    return -1;
 }
