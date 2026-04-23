@@ -25,6 +25,8 @@
 #include "net/net.h"
 #include "i18n/i18n.h"
 
+#include <sys/select.h>
+
 static volatile int g_stop;
 
 /* ---------------------------------------------------------------- SHA1 ---- */
@@ -297,17 +299,61 @@ int ws_client_main(int argc, char **argv)
         ui_ok("sent text frame (%zu bytes payload)", strlen(msg));
     }
 
-    if (interactive || msg) {
-        set_recv_timeout(fd, msg && !interactive ? 1000 : 0);
-        for (;;) {
+    /*
+     * Default behavior:
+     *   - if -m and not -i  : send once, wait briefly for a reply, exit.
+     *   - if -i, or no -m   : enter interactive mode (stdin <-> ws),
+     *                          stay until peer close / Ctrl-C / stdin EOF.
+     */
+    int once = (msg && !interactive);
+    if (once) set_recv_timeout(fd, 1000);
+    else {
+        set_recv_timeout(fd, 0);
+        ui_info(T(T_INTERACTIVE_MODE));
+    }
+
+    int maxfd = fd > STDIN_FILENO ? fd : STDIN_FILENO;
+    char inbuf[4096];
+    for (;;) {
+        if (g_stop) break;
+
+        if (once) {
             uint8_t *pl = NULL; size_t pn = 0; int op = 0;
             if (ws_recv_frame(fd, &pl, &pn, &op) < 0) break;
-            if (op == 0x1)      printf("%s<<%s %.*s\n", UI_DIM, UI_RESET, (int)pn, pl);
+            if (op == 0x1)      printf("%s%s%s %.*s\n",
+                                       UI_BMAGENTA, ui_icon_recv(), UI_RESET,
+                                       (int)pn, pl);
             else if (op == 0x8) { ui_info(T(T_SERVER_CLOSED)); free(pl); break; }
-            else if (op == 0x9) { /* ping -> pong omitted for brevity */ }
             free(pl);
-            if (msg && !interactive) break;
-            if (g_stop) break;
+            break;
+        }
+
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+        FD_SET(STDIN_FILENO, &rfds);
+        if (select(maxfd + 1, &rfds, NULL, NULL, NULL) < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (FD_ISSET(fd, &rfds)) {
+            uint8_t *pl = NULL; size_t pn = 0; int op = 0;
+            if (ws_recv_frame(fd, &pl, &pn, &op) < 0) break;
+            if (op == 0x1)      printf("%s%s%s %.*s\n",
+                                       UI_BMAGENTA, ui_icon_recv(), UI_RESET,
+                                       (int)pn, pl);
+            else if (op == 0x8) { ui_info(T(T_SERVER_CLOSED)); free(pl); break; }
+            free(pl);
+        }
+        if (FD_ISSET(STDIN_FILENO, &rfds)) {
+            ssize_t n = read(STDIN_FILENO, inbuf, sizeof(inbuf));
+            if (n <= 0) break;
+            /* strip trailing newline so the peer sees a clean frame */
+            while (n > 0 && (inbuf[n-1] == '\n' || inbuf[n-1] == '\r')) n--;
+            if (n == 0) continue;
+            uint8_t frame[8192];
+            ssize_t fl = ws_build_text(frame, sizeof(frame), inbuf, n, 1);
+            if (fl < 0 || send(fd, frame, fl, 0) != fl) break;
         }
     }
     close(fd);
