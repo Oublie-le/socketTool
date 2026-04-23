@@ -12,8 +12,6 @@
         return 2; \
     }
 
-STUB(udp_client_main)
-STUB(udp_server_main)
 STUB(ws_client_main)
 STUB(ws_server_main)
 STUB(bping_main)
