@@ -153,11 +153,12 @@ void ui_kv(const char *key, const char *fmt, ...)
 void ui_progress(int done, int total, const char *label)
 {
     if (total <= 0) return;
+    if (!isatty(STDOUT_FILENO)) return;        /* skip on pipes/files */
     int width = 30;
     int filled = (done * width) / total;
     int pct    = (done * 100) / total;
 
-    fputc('\r', stdout);
+    fputs("\r\033[K", stdout);                  /* clear line first */
     printf("  %s%s%s [", UI_BCYAN, ui_icon_hourglass(), UI_RESET);
     for (int i = 0; i < width; i++) {
         if (i < filled) printf("%s%s%s", UI_BGREEN, ICON("█", "#"), UI_RESET);

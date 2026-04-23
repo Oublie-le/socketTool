@@ -1,12 +1,15 @@
 /*
  * bping.c — batch ping applet.
  *
- * Two ping modes:
- *   - tcp  (default): TCP connect probe to a port (no privileges required)
- *   - icmp:           shells out to /bin/ping (-c1 -W1)
+ * Probe modes:
+ *   - tcp  (default): TCP connect to a port (no privileges required)
+ *   - icmp:           native ICMP echo via raw/dgram socket (no /bin/ping)
  *
- * Hosts come from -f <file> (one per line, '#' comments allowed) and/or
- * trailing positional args. Concurrency via pthreads.
+ * Targets come from -f <file> and/or trailing positional args. Each target may
+ * be a single host, an IP range, a CIDR block or a hostname — see help text.
+ *
+ * Output is a table with: target | resolved IP | hostname (rDNS) |
+ *                         result | rtt(ms) | info
  */
 #define _GNU_SOURCE
 #include <stdio.h>
@@ -16,7 +19,10 @@
 #include <errno.h>
 #include <getopt.h>
 #include <pthread.h>
-#include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 #include "core/applet.h"
 #include "ui/ui.h"
@@ -24,7 +30,9 @@
 #include "i18n/i18n.h"
 
 struct host {
-    char       name[128];
+    char       name[128];        /* original target (e.g. "192.168.1.10") */
+    char       ip[16];           /* resolved IPv4 dotted */
+    char       hostname[128];    /* reverse DNS, or "" if same as IP */
     int        ok;
     long       rtt_ms;
     char       err[64];
@@ -33,6 +41,7 @@ struct host {
 struct bping_cfg {
     int        timeout_ms;
     int        mode_icmp;
+    int        no_rdns;
     const char *port;
 };
 
@@ -42,16 +51,19 @@ struct work {
     struct bping_cfg   *cfg;
     pthread_mutex_t     lock;
     int                 next;
+    int                 done;
+    int                 total;
 };
 
-static int icmp_probe(const char *host, int timeout_ms)
+static int resolve_ipv4(const char *host, char ip[16])
 {
-    char cmd[256];
-    int s = (timeout_ms + 999) / 1000; if (s < 1) s = 1;
-    snprintf(cmd, sizeof(cmd),
-             "ping -c 1 -W %d %s >/dev/null 2>&1", s, host);
-    int rc = system(cmd);
-    return WIFEXITED(rc) && WEXITSTATUS(rc) == 0 ? 0 : -1;
+    struct addrinfo hints = {0}, *res = NULL;
+    hints.ai_family = AF_INET;
+    if (getaddrinfo(host, NULL, &hints, &res) != 0 || !res) return -1;
+    struct sockaddr_in *sa = (struct sockaddr_in *)res->ai_addr;
+    inet_ntop(AF_INET, &sa->sin_addr, ip, 16);
+    freeaddrinfo(res);
+    return 0;
 }
 
 static void *worker(void *p)
@@ -64,16 +76,38 @@ static void *worker(void *p)
         if (i >= w->n) break;
 
         struct host *h = &w->hosts[i];
-        long t0 = now_ms();
+
         if (w->cfg->mode_icmp) {
-            h->ok = icmp_probe(h->name, w->cfg->timeout_ms) == 0;
-            if (!h->ok) snprintf(h->err, sizeof(h->err), "no reply");
+            char err[64] = "";
+            int rtt = icmp_ping_once(h->name,
+                                     getpid() & 0xffff, i + 1,
+                                     w->cfg->timeout_ms,
+                                     h->ip, err, sizeof(err));
+            if (rtt >= 0) { h->ok = 1; h->rtt_ms = rtt; }
+            else          { h->ok = 0; h->rtt_ms = w->cfg->timeout_ms;
+                            snprintf(h->err, sizeof(h->err), "%s",
+                                     *err ? err : "no reply"); }
         } else {
+            if (resolve_ipv4(h->name, h->ip) < 0)
+                snprintf(h->ip, sizeof(h->ip), "?");
+            long t0 = now_ms();
             int fd = tcp_connect(h->name, w->cfg->port, w->cfg->timeout_ms);
+            h->rtt_ms = now_ms() - t0;
             if (fd >= 0) { h->ok = 1; close(fd); }
-            else { h->ok = 0; snprintf(h->err, sizeof(h->err), "%s", strerror(errno)); }
+            else { h->ok = 0;
+                   snprintf(h->err, sizeof(h->err), "%s", strerror(errno)); }
         }
-        h->rtt_ms = now_ms() - t0;
+
+        if (!w->cfg->no_rdns && h->ok && h->ip[0] && h->ip[0] != '?') {
+            if (reverse_dns(h->ip, h->hostname, sizeof(h->hostname)) != 0
+                || strcmp(h->hostname, h->ip) == 0)
+                h->hostname[0] = '\0';
+        }
+
+        pthread_mutex_lock(&w->lock);
+        w->done++;
+        ui_progress(w->done, w->total, h->name);
+        pthread_mutex_unlock(&w->lock);
     }
     return NULL;
 }
@@ -90,35 +124,43 @@ static void bping_help(void)
            "    host.example.com              hostname\n"
            "\n"
            "  -f, --file FILE       read targets from FILE (one per line, # comments)\n"
-           "  -m, --mode MODE       'tcp' (default) or 'icmp'\n"
+           "  -m, --mode MODE       'tcp' (default) or 'icmp' (native, no /bin/ping)\n"
            "  -p, --port PORT       port for tcp mode (default 80)\n"
            "  -t, --timeout MS      per-host timeout (default 1500)\n"
            "  -j, --jobs N          parallel workers (default 32)\n"
-           "  -h, --help            show this help\n");
+           "  -n, --no-rdns         skip reverse-DNS lookup\n"
+           "  -h, --help            show this help\n"
+           "\n"
+           "  ICMP mode requires raw-socket privileges:\n"
+           "    sudo setcap cap_net_raw+ep ./socketTool       (preferred), or\n"
+           "    sudo sysctl -w net.ipv4.ping_group_range='0 2147483647'\n");
 }
 
 int bping_main(int argc, char **argv)
 {
     const char *file = NULL;
-    struct bping_cfg cfg = { .timeout_ms = 1500, .mode_icmp = 0, .port = "80" };
+    struct bping_cfg cfg = { .timeout_ms = 1500, .mode_icmp = 0,
+                             .no_rdns = 0, .port = "80" };
     int jobs = 32;
 
     static struct option opts[] = {
         {"file",1,0,'f'},{"mode",1,0,'m'},{"port",1,0,'p'},
-        {"timeout",1,0,'t'},{"jobs",1,0,'j'},{"help",0,0,'h'},{0,0,0,0},
+        {"timeout",1,0,'t'},{"jobs",1,0,'j'},{"no-rdns",0,0,'n'},
+        {"help",0,0,'h'},{0,0,0,0},
     };
     int c;
-    while ((c = getopt_long(argc, argv, "f:m:p:t:j:h", opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "f:m:p:t:j:nh", opts, NULL)) != -1) {
         switch (c) {
         case 'f': file = optarg; break;
         case 'm':
             if (strcmp(optarg, "icmp") == 0) cfg.mode_icmp = 1;
             else if (strcmp(optarg, "tcp") == 0) cfg.mode_icmp = 0;
-            else { ui_err("bad mode: %s", optarg); return 1; }
+            else { ui_err(T(T_E_BAD_MODE), optarg); return 1; }
             break;
         case 'p': cfg.port = optarg; break;
         case 't': cfg.timeout_ms = atoi(optarg); break;
         case 'j': jobs = atoi(optarg); break;
+        case 'n': cfg.no_rdns = 1; break;
         case 'h': bping_help(); return 0;
         default:  bping_help(); return 1;
         }
@@ -156,13 +198,14 @@ int bping_main(int argc, char **argv)
 
     ui_section(ui_icon_rocket(), T(T_BATCH_PING));
     ui_kv(T(T_HOSTS),      "%d", n);
-    ui_kv(T(T_MODE),       "%s%s%s", UI_BCYAN, cfg.mode_icmp ? "icmp" : "tcp",
-          UI_RESET);
+    ui_kv(T(T_MODE),       "%s%s%s", UI_BCYAN,
+                                     cfg.mode_icmp ? "icmp" : "tcp", UI_RESET);
     if (!cfg.mode_icmp) ui_kv("port", "%s", cfg.port);
     ui_kv(T(T_TIMEOUT_MS), "%d ms", cfg.timeout_ms);
     ui_kv(T(T_JOBS),       "%d", jobs);
 
-    struct work w = { .hosts=hosts, .n=n, .cfg=&cfg, .next=0 };
+    struct work w = { .hosts=hosts, .n=n, .cfg=&cfg, .next=0,
+                      .done=0, .total=n };
     pthread_mutex_init(&w.lock, NULL);
 
     if (jobs < 1) jobs = 1;
@@ -172,26 +215,31 @@ int bping_main(int argc, char **argv)
     for (int i = 0; i < jobs; i++) pthread_create(&th[i], NULL, worker, &w);
     for (int i = 0; i < jobs; i++) pthread_join(th[i], NULL);
     long elapsed = now_ms() - t0;
+    ui_progress_done();
 
-    /* output table */
-    const char *cols[]   = { T(T_HOST), T(T_RESULT), T(T_RTT), T(T_INFO) };
-    const int   widths[] = { 28,     6,        8,         24 };
+    /* output table — wider columns to fit IP + hostname */
+    const char *cols[]   = {
+        T(T_TARGET), T(T_IP), T(T_HOSTNAME), T(T_RESULT), T(T_RTT), T(T_INFO)
+    };
+    const int   widths[] = { 22, 15, 28, 6, 8, 22 };
     putchar('\n');
-    ui_table_header(cols, widths, 4);
+    ui_table_header(cols, widths, 6);
 
     int ok = 0, fail = 0;
     for (int i = 0; i < n; i++) {
         char rttbuf[16]; snprintf(rttbuf, sizeof(rttbuf), "%ld", hosts[i].rtt_ms);
         const char *cells[] = {
             hosts[i].name,
+            hosts[i].ip[0]       ? hosts[i].ip       : "-",
+            hosts[i].hostname[0] ? hosts[i].hostname : "-",
             hosts[i].ok ? "OK" : "FAIL",
             rttbuf,
             hosts[i].ok ? "" : hosts[i].err,
         };
-        ui_table_row(cells, widths, 4, hosts[i].ok ? UI_GREEN : UI_RED);
+        ui_table_row(cells, widths, 6, hosts[i].ok ? UI_BGREEN : UI_BRED);
         hosts[i].ok ? ok++ : fail++;
     }
-    ui_table_sep(widths, 4);
+    ui_table_sep(widths, 6);
 
     putchar('\n');
     ui_kv(T(T_OK_LBL),   "%s%s %d%s", UI_BGREEN, ui_icon_ok(), ok, UI_RESET);

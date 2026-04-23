@@ -21,3 +21,14 @@ tcheck "bping CIDR /30 expands to 2 hosts" \
 tcheck "bping reports failure on closed port" \
     "out=\$('$BIN' bping -p 1 -t 200 127.0.0.1 || true); \
      echo \"\$out\" | grep -q FAIL"
+
+tcheck "bping result table includes hostname column" \
+    "'$BIN' bping -p $PORT -t 300 127.0.0.1 | grep -q hostname"
+
+# ICMP requires raw-socket priv; only run if available
+if "$BIN" bping -m icmp -t 500 127.0.0.1 >/dev/null 2>&1; then
+    tcheck "native ICMP ping to 127.0.0.1 OK" \
+        "'$BIN' bping -m icmp -t 500 127.0.0.1 | grep -q OK"
+else
+    printf "  ${C_DIM}- skipping native-ICMP test (no raw-socket priv)${C_RST}\n"
+fi

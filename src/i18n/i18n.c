@@ -83,6 +83,10 @@ static const char *en[T_MAX] = {
     [T_S_WS_SERVER]       = "WebSocket server",
     [T_S_BPING]           = "Batch ping (range/CIDR/list supported)",
     [T_S_BTEST]           = "Batch protocol connectivity test",
+
+    [T_IP]                = "ip",
+    [T_HOSTNAME]          = "hostname",
+    [T_TTL]               = "ttl",
 };
 
 static const char *zh[T_MAX] = {
@@ -157,6 +161,10 @@ static const char *zh[T_MAX] = {
     [T_S_WS_SERVER]       = "WebSocket 服务端",
     [T_S_BPING]           = "批量 ping (支持范围 / CIDR / 列表)",
     [T_S_BTEST]           = "批量协议连通性测试",
+
+    [T_IP]                = "IP",
+    [T_HOSTNAME]          = "主机名",
+    [T_TTL]               = "TTL",
 };
 
 void i18n_init(void)

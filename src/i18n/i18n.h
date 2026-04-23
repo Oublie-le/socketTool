@@ -95,6 +95,11 @@ enum {
     T_S_WS_CLIENT,  T_S_WS_SERVER,
     T_S_BPING,      T_S_BTEST,
 
+    /* bping table headers / fields */
+    T_IP,
+    T_HOSTNAME,
+    T_TTL,
+
     T_MAX
 };
 

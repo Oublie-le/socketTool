@@ -52,4 +52,27 @@ int host_range_expand(const char *expr, char ***out, int max_hosts);
 
 void host_list_free(char **list, int n);
 
+/*
+ * Native ICMP echo ping (IPv4 only, single probe).
+ *
+ * Resolves `host` (hostname or dotted IP), sends one ICMP echo with the
+ * given identifier+sequence, waits up to timeout_ms for a matching reply.
+ *
+ * On success: returns RTT in milliseconds (>= 0) and copies the resolved
+ *             dotted IP into resolved_ip[16].
+ * On failure: returns -1; if errno == EACCES the caller can fall back to
+ *             tcp-ping. err[errlen] receives a short human-readable reason.
+ */
+int icmp_ping_once(const char *host, int identifier, int sequence,
+                   int timeout_ms,
+                   char resolved_ip[16],
+                   char *err, size_t errlen);
+
+/*
+ * Reverse DNS for an IPv4 dotted string. Writes hostname into
+ * out[outlen] on success; returns 0 on success, -1 on failure (in which
+ * case out is set to the original IP for convenience).
+ */
+int reverse_dns(const char *ip, char *out, size_t outlen);
+
 #endif
