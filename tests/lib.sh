@@ -89,7 +89,7 @@ summary() {
 cleanup_pids=()
 on_exit() {
     summary; local rc=$?
-    for p in "${cleanup_pids[@]}"; do kill "$p" 2>/dev/null; done
+    for p in "${cleanup_pids[@]:-}"; do kill "$p" 2>/dev/null; done
     wait 2>/dev/null
     exit $rc
 }
