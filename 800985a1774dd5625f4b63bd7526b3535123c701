@@ -1,0 +1,24 @@
+.claude/skills/socketTool-dev/SKILL.md
+  5aa3148606a844b7 1-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.10",
+  "base_commit_sha": "800985a1774dd5625f4b63bd7526b3535123c701",
+  "prompts": {
+    "5aa3148606a844b7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7beaa246-4276-4c60-af13-8cc5c2644bc1",
+        "model": "claude-opus-4.7"
+      },
+      "human_author": "fengpijie",
+      "messages": [],
+      "total_additions": 201,
+      "total_deletions": 0,
+      "accepted_lines": 201,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/e4b2253686edfd22b19685023ddac7c6468d784cfd0fd35c24f38cba2aa0440f"
+    }
+  }
+}
