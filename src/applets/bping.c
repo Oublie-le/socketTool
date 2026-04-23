@@ -30,6 +30,8 @@
 #include "net/discover.h"
 #include "i18n/i18n.h"
 
+static volatile int g_stop;
+
 struct host {
     char       name[128];        /* original target (e.g. "192.168.1.10") */
     char       ip[16];           /* resolved IPv4 dotted */
@@ -46,6 +48,7 @@ struct bping_cfg {
     int        mode_icmp;
     int        no_rdns;
     int        no_discover;       /* skip mDNS / NBNS / ARP */
+    int        quiet;             /* suppress progress bar (for json/csv) */
     const char *port;
 };
 
@@ -130,7 +133,7 @@ static void *worker(void *p)
 
         pthread_mutex_lock(&w->lock);
         w->done++;
-        ui_progress(w->done, w->total, h->name);
+        if (!w->cfg->quiet) ui_progress(w->done, w->total, h->name);
         pthread_mutex_unlock(&w->lock);
     }
     return NULL;
@@ -154,6 +157,8 @@ static void bping_help(void)
            "  -j, --jobs N          parallel workers (default 32)\n"
            "  -n, --no-rdns         skip reverse-DNS lookup\n"
            "  -D, --no-discover     skip mDNS / NetBIOS / ARP discovery\n"
+           "  -o, --output FMT      output format: table (default) | json | csv\n"
+           "  -W, --watch SECS      re-scan every SECS seconds (Ctrl-C to stop)\n"
            "  -h, --help            show this help\n"
            "\n"
            "  ICMP mode requires raw-socket privileges:\n"
@@ -161,9 +166,144 @@ static void bping_help(void)
            "    sudo sysctl -w net.ipv4.ping_group_range='0 2147483647'\n");
 }
 
+/* ---------------------------------------------------------- output -- */
+
+static void emit_table(struct host *hosts, int n, long elapsed)
+{
+    const char *cols[]   = {
+        T(T_TARGET), T(T_IP), T(T_HOSTNAME), "src", "mac",
+        T(T_RESULT), T(T_RTT), T(T_INFO)
+    };
+    const int   widths[] = { 18, 15, 24, 4, 17, 6, 7, 18 };
+    putchar('\n');
+    ui_table_header(cols, widths, 8);
+
+    int ok = 0, fail = 0;
+    for (int i = 0; i < n; i++) {
+        char rttbuf[16]; snprintf(rttbuf, sizeof(rttbuf), "%ld", hosts[i].rtt_ms);
+        const char *cells[] = {
+            hosts[i].name,
+            hosts[i].ip[0]           ? hosts[i].ip           : "-",
+            hosts[i].hostname[0]     ? hosts[i].hostname     : "-",
+            hosts[i].hostname_src[0] ? hosts[i].hostname_src : "-",
+            hosts[i].mac[0]          ? hosts[i].mac          : "-",
+            hosts[i].ok ? "OK" : "FAIL",
+            rttbuf,
+            hosts[i].ok ? "" : hosts[i].err,
+        };
+        ui_table_row(cells, widths, 8, hosts[i].ok ? UI_BGREEN : UI_BRED);
+        hosts[i].ok ? ok++ : fail++;
+    }
+    ui_table_sep(widths, 8);
+
+    putchar('\n');
+    ui_kv(T(T_OK_LBL),   "%s%s %d%s", UI_BGREEN, ui_icon_ok(), ok, UI_RESET);
+    ui_kv(T(T_FAIL_LBL), "%s%s %d%s", fail?UI_BRED:UI_BGREEN,
+          fail?ui_icon_fail():ui_icon_ok(), fail, UI_RESET);
+    ui_kv(T(T_ELAPSED),  "%ld ms", elapsed);
+}
+
+static void json_str(const char *s)
+{
+    putchar('"');
+    for (const unsigned char *p = (const unsigned char*)s; *p; p++) {
+        switch (*p) {
+        case '"': fputs("\\\"", stdout); break;
+        case '\\': fputs("\\\\", stdout); break;
+        case '\n': fputs("\\n", stdout); break;
+        case '\r': fputs("\\r", stdout); break;
+        case '\t': fputs("\\t", stdout); break;
+        default:
+            if (*p < 0x20) printf("\\u%04x", *p);
+            else putchar(*p);
+        }
+    }
+    putchar('"');
+}
+
+static void emit_json(struct host *hosts, int n, long elapsed)
+{
+    int ok = 0;
+    for (int i = 0; i < n; i++) if (hosts[i].ok) ok++;
+
+    printf("{\"elapsed_ms\":%ld,\"total\":%d,\"ok\":%d,\"fail\":%d,"
+           "\"results\":[", elapsed, n, ok, n - ok);
+    for (int i = 0; i < n; i++) {
+        if (i) putchar(',');
+        printf("{\"target\":");        json_str(hosts[i].name);
+        printf(",\"ip\":");            json_str(hosts[i].ip);
+        printf(",\"hostname\":");      json_str(hosts[i].hostname);
+        printf(",\"hostname_src\":");  json_str(hosts[i].hostname_src);
+        printf(",\"mac\":");           json_str(hosts[i].mac);
+        printf(",\"ok\":%s",           hosts[i].ok ? "true" : "false");
+        printf(",\"rtt_ms\":%ld",      hosts[i].rtt_ms);
+        printf(",\"err\":");           json_str(hosts[i].err);
+        putchar('}');
+    }
+    printf("]}\n");
+}
+
+static void csv_field(const char *s)
+{
+    int needs_quote = 0;
+    for (const char *p = s; *p; p++)
+        if (*p == ',' || *p == '"' || *p == '\n') { needs_quote = 1; break; }
+    if (!needs_quote) { fputs(s, stdout); return; }
+    putchar('"');
+    for (const char *p = s; *p; p++) {
+        if (*p == '"') fputs("\"\"", stdout);
+        else putchar(*p);
+    }
+    putchar('"');
+}
+
+static void emit_csv(struct host *hosts, int n, long elapsed)
+{
+    (void)elapsed;
+    printf("target,ip,hostname,hostname_src,mac,ok,rtt_ms,err\n");
+    for (int i = 0; i < n; i++) {
+        csv_field(hosts[i].name);          putchar(',');
+        csv_field(hosts[i].ip);            putchar(',');
+        csv_field(hosts[i].hostname);      putchar(',');
+        csv_field(hosts[i].hostname_src);  putchar(',');
+        csv_field(hosts[i].mac);           putchar(',');
+        printf("%s,", hosts[i].ok ? "true" : "false");
+        printf("%ld,", hosts[i].rtt_ms);
+        csv_field(hosts[i].err);           putchar('\n');
+    }
+}
+
+/* ---------------------------------------------------------- one scan -- */
+
+static int run_scan(struct host *hosts, int n, struct bping_cfg *cfg, int jobs,
+                    long *out_elapsed)
+{
+    struct work w = { .hosts=hosts, .n=n, .cfg=cfg, .next=0,
+                      .done=0, .total=n };
+    pthread_mutex_init(&w.lock, NULL);
+
+    if (jobs < 1) jobs = 1;
+    if (jobs > n) jobs = n;
+    pthread_t *th = calloc(jobs, sizeof(*th));
+    long t0 = now_ms();
+    for (int i = 0; i < jobs; i++) pthread_create(&th[i], NULL, worker, &w);
+    for (int i = 0; i < jobs; i++) pthread_join(th[i], NULL);
+    *out_elapsed = now_ms() - t0;
+    if (!cfg->quiet) ui_progress_done();
+
+    pthread_mutex_destroy(&w.lock);
+    free(th);
+
+    int fail = 0;
+    for (int i = 0; i < n; i++) if (!hosts[i].ok) fail++;
+    return fail;
+}
+
 int bping_main(int argc, char **argv)
 {
     const char *file = NULL;
+    const char *out_fmt = "table";       /* table | json | csv */
+    int watch_sec = 0;                   /* 0 = run once */
     struct bping_cfg cfg = { .timeout_ms = 1500, .mode_icmp = 0,
                              .no_rdns = 0, .no_discover = 0, .port = "80" };
     int jobs = 32;
@@ -172,10 +312,11 @@ int bping_main(int argc, char **argv)
         {"file",1,0,'f'},{"mode",1,0,'m'},{"port",1,0,'p'},
         {"timeout",1,0,'t'},{"jobs",1,0,'j'},{"no-rdns",0,0,'n'},
         {"no-discover",0,0,'D'},
+        {"output",1,0,'o'},{"watch",1,0,'W'},
         {"help",0,0,'h'},{0,0,0,0},
     };
     int c;
-    while ((c = getopt_long(argc, argv, "f:m:p:t:j:nDh", opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "f:m:p:t:j:nDo:W:h", opts, NULL)) != -1) {
         switch (c) {
         case 'f': file = optarg; break;
         case 'm':
@@ -186,6 +327,14 @@ int bping_main(int argc, char **argv)
         case 'p': cfg.port = optarg; break;
         case 't': cfg.timeout_ms = atoi(optarg); break;
         case 'j': jobs = atoi(optarg); break;
+        case 'o':
+            if (strcmp(optarg, "table") && strcmp(optarg, "json") &&
+                strcmp(optarg, "csv")) {
+                ui_err("bad output format: %s (table|json|csv)", optarg);
+                return 1;
+            }
+            out_fmt = optarg; break;
+        case 'W': watch_sec = atoi(optarg); break;
         case 'n': cfg.no_rdns = 1; break;
         case 'D': cfg.no_discover = 1; break;
         case 'h': bping_help(); return 0;
@@ -223,61 +372,50 @@ int bping_main(int argc, char **argv)
 
     if (n == 0) { bping_help(); free(hosts); return 1; }
 
-    ui_section(ui_icon_rocket(), T(T_BATCH_PING));
-    ui_kv(T(T_HOSTS),      "%d", n);
-    ui_kv(T(T_MODE),       "%s%s%s", UI_BCYAN,
-                                     cfg.mode_icmp ? "icmp" : "tcp", UI_RESET);
-    if (!cfg.mode_icmp) ui_kv("port", "%s", cfg.port);
-    ui_kv(T(T_TIMEOUT_MS), "%d ms", cfg.timeout_ms);
-    ui_kv(T(T_JOBS),       "%d", jobs);
+    int is_table = (strcmp(out_fmt, "table") == 0);
+    if (!is_table) cfg.quiet = 1;
 
-    struct work w = { .hosts=hosts, .n=n, .cfg=&cfg, .next=0,
-                      .done=0, .total=n };
-    pthread_mutex_init(&w.lock, NULL);
-
-    if (jobs < 1) jobs = 1;
-    if (jobs > n) jobs = n;
-    pthread_t *th = calloc(jobs, sizeof(*th));
-    long t0 = now_ms();
-    for (int i = 0; i < jobs; i++) pthread_create(&th[i], NULL, worker, &w);
-    for (int i = 0; i < jobs; i++) pthread_join(th[i], NULL);
-    long elapsed = now_ms() - t0;
-    ui_progress_done();
-
-    /* output table */
-    const char *cols[]   = {
-        T(T_TARGET), T(T_IP), T(T_HOSTNAME), "src", "mac",
-        T(T_RESULT), T(T_RTT), T(T_INFO)
-    };
-    const int   widths[] = { 18, 15, 24, 4, 17, 6, 7, 18 };
-    putchar('\n');
-    ui_table_header(cols, widths, 8);
-
-    int ok = 0, fail = 0;
-    for (int i = 0; i < n; i++) {
-        char rttbuf[16]; snprintf(rttbuf, sizeof(rttbuf), "%ld", hosts[i].rtt_ms);
-        const char *cells[] = {
-            hosts[i].name,
-            hosts[i].ip[0]           ? hosts[i].ip           : "-",
-            hosts[i].hostname[0]     ? hosts[i].hostname     : "-",
-            hosts[i].hostname_src[0] ? hosts[i].hostname_src : "-",
-            hosts[i].mac[0]          ? hosts[i].mac          : "-",
-            hosts[i].ok ? "OK" : "FAIL",
-            rttbuf,
-            hosts[i].ok ? "" : hosts[i].err,
-        };
-        ui_table_row(cells, widths, 8, hosts[i].ok ? UI_BGREEN : UI_BRED);
-        hosts[i].ok ? ok++ : fail++;
+    if (is_table) {
+        ui_section(ui_icon_rocket(), T(T_BATCH_PING));
+        ui_kv(T(T_HOSTS),      "%d", n);
+        ui_kv(T(T_MODE),       "%s%s%s", UI_BCYAN,
+                                         cfg.mode_icmp ? "icmp" : "tcp", UI_RESET);
+        if (!cfg.mode_icmp) ui_kv("port", "%s", cfg.port);
+        ui_kv(T(T_TIMEOUT_MS), "%d ms", cfg.timeout_ms);
+        ui_kv(T(T_JOBS),       "%d", jobs);
+        if (watch_sec > 0) ui_kv("watch", "%d s", watch_sec);
     }
-    ui_table_sep(widths, 8);
 
-    putchar('\n');
-    ui_kv(T(T_OK_LBL),   "%s%s %d%s", UI_BGREEN, ui_icon_ok(), ok, UI_RESET);
-    ui_kv(T(T_FAIL_LBL), "%s%s %d%s", fail?UI_BRED:UI_BGREEN,
-          fail?ui_icon_fail():ui_icon_ok(), fail, UI_RESET);
-    ui_kv(T(T_ELAPSED),  "%ld ms", elapsed);
+    install_sigint(&g_stop);
 
-    pthread_mutex_destroy(&w.lock);
-    free(th); free(hosts);
-    return fail == 0 ? 0 : 4;
+    int last_fail = 0, round = 0;
+    do {
+        /* reset per-host result fields between rounds */
+        for (int i = 0; i < n; i++) {
+            hosts[i].ok = 0; hosts[i].rtt_ms = 0;
+            hosts[i].err[0] = 0;
+            /* keep ip/hostname/mac discovered in earlier rounds */
+        }
+
+        long elapsed;
+        last_fail = run_scan(hosts, n, &cfg, jobs, &elapsed);
+
+        if (is_table) {
+            if (watch_sec > 0 && round > 0)
+                fputs("\033[2J\033[H", stdout);   /* clear screen on re-scan */
+            emit_table(hosts, n, elapsed);
+        } else if (strcmp(out_fmt, "json") == 0) {
+            emit_json(hosts, n, elapsed);
+        } else {
+            emit_csv(hosts, n, elapsed);
+        }
+        fflush(stdout);
+
+        round++;
+        if (watch_sec <= 0 || g_stop) break;
+        for (int s = 0; s < watch_sec && !g_stop; s++) sleep(1);
+    } while (!g_stop);
+
+    free(hosts);
+    return last_fail == 0 ? 0 : 4;
 }
