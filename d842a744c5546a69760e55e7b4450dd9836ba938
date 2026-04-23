@@ -1,0 +1,24 @@
+src/ws.c
+  673f52fdda72fb43 1-416
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.9",
+  "base_commit_sha": "d842a744c5546a69760e55e7b4450dd9836ba938",
+  "prompts": {
+    "673f52fdda72fb43": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "098278e7-0eed-4e6c-9147-bd5ffa068038",
+        "model": "claude-opus-4.7"
+      },
+      "human_author": "fengpijie",
+      "messages": [],
+      "total_additions": 416,
+      "total_deletions": 2,
+      "accepted_lines": 416,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/1d3cd08b7ec80ff291fa7a32a966276becd4a5f0fd0b0baa4510caa73e544a32"
+    }
+  }
+}
