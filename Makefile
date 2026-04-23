@@ -82,7 +82,11 @@ uninstall:  ## Remove installed files
 	rm -f $(DESTDIR)$(COMPDIR)/socketTool
 
 setcap: $(BIN)  ## Grant CAP_NET_RAW to ./socketTool (for native ICMP without root)
-	sudo setcap cap_net_raw+ep ./$(BIN)
+	@if command -v setcap >/dev/null 2>&1; then \
+		sudo setcap cap_net_raw+ep ./$(BIN); \
+	else \
+		echo "setcap not available (Linux-only). On macOS, use sudo to run bping."; \
+	fi
 
 ##@ Quality
 
