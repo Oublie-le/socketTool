@@ -17,6 +17,7 @@
 #include "core/applet.h"
 #include "ui/ui.h"
 #include "net/net.h"
+#include "i18n/i18n.h"
 
 enum { P_TCP, P_UDP, P_WS };
 
@@ -218,11 +219,11 @@ int btest_main(int argc, char **argv)
     }
     if (n == 0) { btest_help(); free(t); return 1; }
 
-    ui_section("Batch connectivity test");
-    ui_kv("targets", "%d", n);
-    ui_kv("default", "%s", proto_name(cfg.default_proto));
-    ui_kv("timeout", "%d ms", cfg.timeout_ms);
-    ui_kv("jobs",    "%d", jobs);
+    ui_section(ui_icon_rocket(), T(T_BATCH_TEST));
+    ui_kv(T(T_TARGETS),    "%d", n);
+    ui_kv(T(T_DEFAULT),    "%s%s%s", UI_BCYAN, proto_name(cfg.default_proto), UI_RESET);
+    ui_kv(T(T_TIMEOUT_MS), "%d ms", cfg.timeout_ms);
+    ui_kv(T(T_JOBS),       "%d", jobs);
 
     struct work w = { .t=t, .n=n, .cfg=&cfg, .next=0 };
     pthread_mutex_init(&w.lock, NULL);
@@ -234,7 +235,7 @@ int btest_main(int argc, char **argv)
     for (int i = 0; i < jobs; i++) pthread_join(th[i], NULL);
     long elapsed = now_ms() - t0;
 
-    const char *cols[]   = { "target", "proto", "result", "rtt(ms)", "info" };
+    const char *cols[]   = { T(T_TARGET), T(T_PROTO), T(T_RESULT), T(T_RTT), T(T_INFO) };
     const int   widths[] = { 30,       5,       6,        8,         24 };
     putchar('\n');
     ui_table_header(cols, widths, 5);
@@ -251,9 +252,10 @@ int btest_main(int argc, char **argv)
     }
     ui_table_sep(widths, 5);
     putchar('\n');
-    ui_kv("ok",      "%s%d%s", UI_GREEN, ok, UI_RESET);
-    ui_kv("fail",    "%s%d%s", fail ? UI_RED : UI_GREEN, fail, UI_RESET);
-    ui_kv("elapsed", "%ld ms", elapsed);
+    ui_kv(T(T_OK_LBL),   "%s%s %d%s", UI_BGREEN, ui_icon_ok(), ok, UI_RESET);
+    ui_kv(T(T_FAIL_LBL), "%s%s %d%s", fail?UI_BRED:UI_BGREEN,
+          fail?ui_icon_fail():ui_icon_ok(), fail, UI_RESET);
+    ui_kv(T(T_ELAPSED),  "%ld ms", elapsed);
 
     pthread_mutex_destroy(&w.lock);
     free(th); free(t);

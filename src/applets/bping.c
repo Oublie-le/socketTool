@@ -21,6 +21,7 @@
 #include "core/applet.h"
 #include "ui/ui.h"
 #include "net/net.h"
+#include "i18n/i18n.h"
 
 struct host {
     char       name[128];
@@ -138,13 +139,13 @@ int bping_main(int argc, char **argv)
     }
     if (n == 0) { bping_help(); free(hosts); return 1; }
 
-    ui_section("Batch ping");
-    ui_kv("hosts",   "%d", n);
-    ui_kv("mode",    "%s%s", cfg.mode_icmp ? "icmp" : "tcp",
-          cfg.mode_icmp ? "" : "");
+    ui_section(ui_icon_rocket(), T(T_BATCH_PING));
+    ui_kv(T(T_HOSTS),      "%d", n);
+    ui_kv(T(T_MODE),       "%s%s%s", UI_BCYAN, cfg.mode_icmp ? "icmp" : "tcp",
+          UI_RESET);
     if (!cfg.mode_icmp) ui_kv("port", "%s", cfg.port);
-    ui_kv("timeout", "%d ms", cfg.timeout_ms);
-    ui_kv("jobs",    "%d", jobs);
+    ui_kv(T(T_TIMEOUT_MS), "%d ms", cfg.timeout_ms);
+    ui_kv(T(T_JOBS),       "%d", jobs);
 
     struct work w = { .hosts=hosts, .n=n, .cfg=&cfg, .next=0 };
     pthread_mutex_init(&w.lock, NULL);
@@ -158,7 +159,7 @@ int bping_main(int argc, char **argv)
     long elapsed = now_ms() - t0;
 
     /* output table */
-    const char *cols[]   = { "host", "result", "rtt(ms)", "info" };
+    const char *cols[]   = { T(T_HOST), T(T_RESULT), T(T_RTT), T(T_INFO) };
     const int   widths[] = { 28,     6,        8,         24 };
     putchar('\n');
     ui_table_header(cols, widths, 4);
@@ -178,9 +179,10 @@ int bping_main(int argc, char **argv)
     ui_table_sep(widths, 4);
 
     putchar('\n');
-    ui_kv("ok",      "%s%d%s", UI_GREEN, ok, UI_RESET);
-    ui_kv("fail",    "%s%d%s", fail ? UI_RED : UI_GREEN, fail, UI_RESET);
-    ui_kv("elapsed", "%ld ms", elapsed);
+    ui_kv(T(T_OK_LBL),   "%s%s %d%s", UI_BGREEN, ui_icon_ok(), ok, UI_RESET);
+    ui_kv(T(T_FAIL_LBL), "%s%s %d%s", fail?UI_BRED:UI_BGREEN,
+          fail?ui_icon_fail():ui_icon_ok(), fail, UI_RESET);
+    ui_kv(T(T_ELAPSED),  "%ld ms", elapsed);
 
     pthread_mutex_destroy(&w.lock);
     free(th); free(hosts);

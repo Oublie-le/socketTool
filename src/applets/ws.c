@@ -23,6 +23,7 @@
 #include "core/applet.h"
 #include "ui/ui.h"
 #include "net/net.h"
+#include "i18n/i18n.h"
 
 static volatile int g_stop;
 
@@ -253,8 +254,8 @@ int ws_client_main(int argc, char **argv)
     install_sigint(&g_stop);
     srand((unsigned)time(NULL) ^ getpid());
 
-    ui_section("WebSocket client");
-    ui_kv("target", "ws://%s:%s%s", host, port, path);
+    ui_section(ui_icon_globe(), "WebSocket client");
+    ui_kv(T(T_TARGET), "%sws://%s:%s%s%s", UI_BCYAN, host, port, path, UI_RESET);
 
     int fd = tcp_connect(host, port, timeout);
     if (fd < 0) { ui_err("connect: %s", strerror(errno)); return 2; }
@@ -285,7 +286,7 @@ int ws_client_main(int argc, char **argv)
     if (!acc || strncmp(acc, expect, strlen(expect)) != 0) {
         ui_err("bad Sec-WebSocket-Accept"); close(fd); return 3;
     }
-    ui_ok("handshake complete");
+    ui_ok(T(T_HANDSHAKE_OK));
 
     if (msg) {
         uint8_t frame[8192];
@@ -302,7 +303,7 @@ int ws_client_main(int argc, char **argv)
             uint8_t *pl = NULL; size_t pn = 0; int op = 0;
             if (ws_recv_frame(fd, &pl, &pn, &op) < 0) break;
             if (op == 0x1)      printf("%s<<%s %.*s\n", UI_DIM, UI_RESET, (int)pn, pl);
-            else if (op == 0x8) { ui_info("server closed"); free(pl); break; }
+            else if (op == 0x8) { ui_info(T(T_SERVER_CLOSED)); free(pl); break; }
             else if (op == 0x9) { /* ping -> pong omitted for brevity */ }
             free(pl);
             if (msg && !interactive) break;
@@ -369,12 +370,13 @@ int ws_server_main(int argc, char **argv)
 
     install_sigint(&g_stop);
     int sfd = tcp_listen(host, port, 16);
-    if (sfd < 0) { ui_err("listen failed"); return 2; }
+    if (sfd < 0) { ui_err(T(T_E_LISTEN)); return 2; }
 
-    ui_section("WebSocket server");
-    ui_kv("listen", "ws://%s:%s/", host?host:"0.0.0.0", port);
-    ui_kv("mode", "%s", echo ? "echo" : "discard");
-    ui_info("waiting for clients (Ctrl-C to quit)");
+    ui_section(ui_icon_globe(), "WebSocket server");
+    ui_kv(T(T_LISTEN), "%sws://%s:%s/%s", UI_BCYAN, host?host:"0.0.0.0", port, UI_RESET);
+    ui_kv(T(T_MODE),   "%s%s%s", echo?UI_BGREEN:UI_BYELLOW,
+                                  echo?T(T_ECHO):T(T_DISCARD), UI_RESET);
+    ui_info(T(T_WAITING_CLIENTS));
 
     while (!g_stop) {
         struct sockaddr_storage peer; socklen_t plen = sizeof(peer);
@@ -387,10 +389,10 @@ int ws_server_main(int argc, char **argv)
                     NI_NUMERICHOST | NI_NUMERICSERV);
 
         if (ws_handshake_server(cfd) < 0) {
-            ui_warn("handshake failed from %s:%s", hbuf, sbuf);
+            ui_warn(T(T_E_HANDSHAKE));
             close(cfd); continue;
         }
-        ui_ok("client %s:%s upgraded", hbuf, sbuf);
+        ui_ok(T(T_ACCEPTED), hbuf, sbuf);
 
         for (;;) {
             uint8_t *pl = NULL; size_t pn = 0; int op = 0;
@@ -407,7 +409,7 @@ int ws_server_main(int argc, char **argv)
             }
             free(pl);
         }
-        ui_info("closed %s:%s", hbuf, sbuf);
+        ui_info(T(T_CLOSED), hbuf, sbuf);
         close(cfd);
         if (once) break;
     }

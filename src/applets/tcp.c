@@ -17,21 +17,22 @@
 #include "core/applet.h"
 #include "ui/ui.h"
 #include "net/net.h"
+#include "i18n/i18n.h"
 
 static volatile int g_stop;
 
-/* ------------------------------------------------------------------ client */
-
 static void tcp_client_help(void)
 {
-    printf("Usage: tcp-client -H <host> -p <port> [options]\n"
-           "  -H, --host HOST       remote host (required)\n"
-           "  -p, --port PORT       remote port (required)\n"
+    printf("%s: tcp-client -H <host> -p <port> [%s]\n"
+           "  -H, --host HOST       remote host (%s)\n"
+           "  -p, --port PORT       remote port (%s)\n"
            "  -m, --message TEXT    send TEXT after connect\n"
            "  -i, --interactive     interactive mode (stdin <-> socket)\n"
-           "  -t, --timeout MS      connect timeout (default 5000)\n"
+           "  -t, --timeout MS      connect timeout (%s 5000)\n"
            "  -c, --count N         send the message N times then exit\n"
-           "  -h, --help            show this help\n");
+           "  -h, --help            %s\n",
+           T(T_USAGE), T(T_OPTIONS), T(T_REQUIRED), T(T_REQUIRED),
+           T(T_DEFAULT), T(T_HELP));
 }
 
 static int tcp_pump(int fd)
@@ -89,29 +90,28 @@ int tcp_client_main(int argc, char **argv)
 
     install_sigint(&g_stop);
 
-    ui_section("TCP client");
-    ui_kv("target", "%s:%s", host, port);
-    ui_kv("timeout", "%d ms", timeout);
+    ui_section(ui_icon_globe(), "TCP client");
+    ui_kv(T(T_TARGET),     "%s%s:%s%s", UI_BCYAN, host, port, UI_RESET);
+    ui_kv(T(T_TIMEOUT_MS), "%d ms", timeout);
 
     long t0 = now_ms();
     int fd = tcp_connect(host, port, timeout);
-    if (fd < 0) { ui_err("connect failed: %s", strerror(errno)); return 2; }
-    ui_ok("connected in %ld ms", now_ms() - t0);
+    if (fd < 0) { ui_err(T(T_E_CONNECT), strerror(errno)); return 2; }
+    ui_ok(T(T_CONNECTED_IN), now_ms() - t0);
 
     if (msg) {
         for (int i = 0; i < count && !g_stop; i++) {
             if (send(fd, msg, strlen(msg), 0) < 0) {
-                ui_err("send: %s", strerror(errno)); close(fd); return 3;
+                ui_err(T(T_E_SEND), strerror(errno)); close(fd); return 3;
             }
-            ui_ok("sent %zu bytes (#%d)", strlen(msg), i + 1);
+            ui_ok(T(T_SENT_BYTES), strlen(msg), i + 1);
         }
     }
 
     if (interactive || !msg) {
-        ui_info("entering interactive mode (Ctrl-C to quit)");
+        ui_info(T(T_INTERACTIVE_MODE));
         tcp_pump(fd);
     } else {
-        /* drain a short reply */
         set_recv_timeout(fd, 500);
         char buf[4096]; ssize_t n = recv(fd, buf, sizeof(buf), 0);
         if (n > 0) { fwrite(buf, 1, n, stdout); fputc('\n', stdout); }
@@ -120,17 +120,17 @@ int tcp_client_main(int argc, char **argv)
     return 0;
 }
 
-/* ------------------------------------------------------------------ server */
-
 static void tcp_server_help(void)
 {
-    printf("Usage: tcp-server -p <port> [options]\n"
-           "  -H, --host HOST       bind address (default: any)\n"
-           "  -p, --port PORT       listen port (required)\n"
-           "  -e, --echo            echo back received data (default)\n"
+    printf("%s: tcp-server -p <port> [%s]\n"
+           "  -H, --host HOST       bind address (%s: any)\n"
+           "  -p, --port PORT       listen port (%s)\n"
+           "  -e, --echo            echo back received data (%s)\n"
            "  -d, --discard         discard received data\n"
            "  -1, --once            accept a single client then exit\n"
-           "  -h, --help            show this help\n");
+           "  -h, --help            %s\n",
+           T(T_USAGE), T(T_OPTIONS), T(T_DEFAULT), T(T_REQUIRED),
+           T(T_DEFAULT), T(T_HELP));
 }
 
 static void serve_one(int cfd, struct sockaddr_storage *peer, int echo)
@@ -139,18 +139,18 @@ static void serve_one(int cfd, struct sockaddr_storage *peer, int echo)
     getnameinfo((struct sockaddr*)peer, sizeof(*peer),
                 host, sizeof(host), serv, sizeof(serv),
                 NI_NUMERICHOST | NI_NUMERICSERV);
-    ui_ok("accepted %s:%s", host, serv);
+    ui_ok(T(T_ACCEPTED), host, serv);
 
     char buf[4096];
     for (;;) {
         ssize_t n = recv(cfd, buf, sizeof(buf), 0);
         if (n <= 0) break;
-        fprintf(stdout, "%s<<%s %.*s%s\n",
-                UI_DIM, UI_RESET, (int)n, buf,
+        fprintf(stdout, "%s%s%s %.*s%s\n",
+                UI_BMAGENTA, ui_icon_recv(), UI_RESET, (int)n, buf,
                 buf[n-1] == '\n' ? "" : "");
         if (echo) send(cfd, buf, n, 0);
     }
-    ui_info("closed %s:%s", host, serv);
+    ui_info(T(T_CLOSED), host, serv);
     close(cfd);
 }
 
@@ -181,19 +181,20 @@ int tcp_server_main(int argc, char **argv)
     install_sigint(&g_stop);
 
     int sfd = tcp_listen(host, port, 16);
-    if (sfd < 0) { ui_err("listen %s:%s failed", host?host:"*", port); return 2; }
+    if (sfd < 0) { ui_err("%s %s:%s", T(T_E_LISTEN), host?host:"*", port); return 2; }
 
-    ui_section("TCP server");
-    ui_kv("listen", "%s:%s", host?host:"0.0.0.0", port);
-    ui_kv("mode", "%s", echo ? "echo" : "discard");
-    ui_info("waiting for clients (Ctrl-C to quit)");
+    ui_section(ui_icon_globe(), "TCP server");
+    ui_kv(T(T_LISTEN), "%s%s:%s%s", UI_BCYAN, host?host:"0.0.0.0", port, UI_RESET);
+    ui_kv(T(T_MODE),   "%s%s%s", echo?UI_BGREEN:UI_BYELLOW,
+                                  echo?T(T_ECHO):T(T_DISCARD), UI_RESET);
+    ui_info(T(T_WAITING_CLIENTS));
 
     while (!g_stop) {
         struct sockaddr_storage peer; socklen_t plen = sizeof(peer);
         int cfd = accept(sfd, (struct sockaddr*)&peer, &plen);
         if (cfd < 0) {
             if (errno == EINTR) continue;
-            ui_err("accept: %s", strerror(errno)); break;
+            ui_err(T(T_E_RECV), strerror(errno)); break;
         }
         serve_one(cfd, &peer, echo);
         if (once) break;
