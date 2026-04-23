@@ -21,12 +21,23 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netinet/in.h>
-#include <netinet/ip.h>
-#include <netinet/ip_icmp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#if defined(__APPLE__) && defined(__MACH__)
+/* macOS / Darwin */
+#include <netinet/ip.h>
+#define IP_HL(ip) ((ip)->ip_hl)
+typedef struct ip ip_hdr_t;
+#else
+/* Linux */
+#include <netinet/ip.h>
+#define IP_HL(ip) ((ip)->ihl)
+typedef struct iphdr ip_hdr_t;
+#endif
+
 #include "net/net.h"
+#include "net/icmp_compat.h"
 
 static uint16_t ip_csum(const void *p, size_t n)
 {
@@ -94,17 +105,17 @@ int icmp_ping_once(const char *host, int identifier, int sequence,
 
     /* assemble packet: 8-byte ICMP header + 48 bytes payload (timestamp) */
     uint8_t pkt[64] = {0};
-    struct icmphdr *hdr = (struct icmphdr *)pkt;
-    hdr->type             = ICMP_ECHO;
-    hdr->code             = 0;
-    hdr->un.echo.id       = htons((uint16_t)identifier);
-    hdr->un.echo.sequence = htons((uint16_t)sequence);
+    icmp_hdr_t *hdr = (icmp_hdr_t *)pkt;
+    hdr->ICMP_TYPE = ICMP_ECHO;
+    hdr->ICMP_CODE = 0;
+    hdr->ICMP_ID   = htons((uint16_t)identifier);
+    hdr->ICMP_SEQ  = htons((uint16_t)sequence);
 
     long t_send = now_us();
     memcpy(pkt + sizeof(*hdr), &t_send, sizeof(t_send));
 
-    hdr->checksum = 0;
-    hdr->checksum = ip_csum(pkt, sizeof(pkt));
+    hdr->ICMP_CKSUM = 0;
+    hdr->ICMP_CKSUM = ip_csum(pkt, sizeof(pkt));
 
     if (sendto(fd, pkt, sizeof(pkt), 0,
                (struct sockaddr *)&dst, sizeof(dst)) < 0) {
@@ -140,20 +151,20 @@ int icmp_ping_once(const char *host, int identifier, int sequence,
                              (struct sockaddr *)&from, &fl);
         if (n <= 0) continue;
 
-        struct icmphdr *rh;
+        icmp_hdr_t *rh;
         if (dgram) {
             /* DGRAM: kernel strips IP header; payload starts at buf */
             if (n < (ssize_t)sizeof(*rh)) continue;
-            rh = (struct icmphdr *)buf;
+            rh = (icmp_hdr_t *)buf;
         } else {
             /* RAW: includes IP header */
-            if (n < (ssize_t)(sizeof(struct iphdr) + sizeof(*rh))) continue;
-            struct iphdr *iph = (struct iphdr *)buf;
-            rh = (struct icmphdr *)(buf + iph->ihl * 4);
+            if (n < (ssize_t)(sizeof(ip_hdr_t) + sizeof(*rh))) continue;
+            ip_hdr_t *iph = (ip_hdr_t *)buf;
+            rh = (icmp_hdr_t *)(buf + IP_HL(iph) * 4);
         }
-        if (rh->type != ICMP_ECHOREPLY) continue;
-        if (!dgram && ntohs(rh->un.echo.id) != identifier) continue;
-        if (ntohs(rh->un.echo.sequence) != sequence) continue;
+        if (rh->ICMP_TYPE != ICMP_ECHOREPLY) continue;
+        if (!dgram && ntohs(rh->ICMP_ID) != identifier) continue;
+        if (ntohs(rh->ICMP_SEQ) != sequence) continue;
 
         long rtt_us = now_us() - t_send;
         close(fd);
