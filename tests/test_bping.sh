@@ -16,14 +16,14 @@ tcheck "bping last-octet range parses" \
 
 tcheck "bping CIDR /30 expands to 2 hosts" \
     "'$BIN' bping -p $PORT -t 200 -j 8 127.0.0.0/30 \
-     | grep -E 'hosts' | grep -q '2'"
+     | grep -E 'hosts|主机数' | grep -q '2'"
 
 tcheck "bping reports failure on closed port" \
     "out=\$('$BIN' bping -p 1 -t 200 127.0.0.1 || true); \
      echo \"\$out\" | grep -q FAIL"
 
 tcheck "bping result table includes hostname column" \
-    "'$BIN' bping -p $PORT -t 300 127.0.0.1 | grep -q hostname"
+    "'$BIN' --lang en bping -p $PORT -t 300 127.0.0.1 | grep -q hostname"
 
 # ICMP requires raw-socket priv; only run if available
 if "$BIN" bping -m icmp -t 500 127.0.0.1 >/dev/null 2>&1; then

@@ -16,4 +16,4 @@ tcheck "chinese title shown by --lang zh" "'$BIN' --lang zh --help | grep -q '�
 tcheck "ST_LANG env switches output"      "ST_LANG=zh '$BIN' --help | grep -q '可用子命令'"
 
 # symlink dispatch: tcp-client -h must show its own usage
-tcheck "symlink tcp-client --help works"  "'$ROOT/tcp-client' --help | grep -qi usage"
+tcheck "symlink tcp-client --help works"  "'$ROOT/tcp-client' --lang en --help | grep -qi usage"

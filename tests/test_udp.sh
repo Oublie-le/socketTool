@@ -13,4 +13,4 @@ tcheck "udp client gets echo" \
      echo \"\$out\" | grep -q hello-udp"
 
 tcheck "udp client summary printed" \
-    "'$BIN' udp-client -H 127.0.0.1 -p $PORT -m x -c 1 -i 0 -w 200 | grep -qi sent"
+    "'$BIN' --lang en udp-client -H 127.0.0.1 -p $PORT -m x -c 1 -i 0 -w 200 | grep -qi sent"
