@@ -29,13 +29,13 @@ SOURCES := \
 OBJECTS := $(SOURCES:.c=.o)
 
 APPLETS := tcp-client tcp-server udp-client udp-server \
-           ws-client ws-server bping btest
+           ws-client ws-server bping btest diag
 
 PREFIX     ?= /usr/local
 BINDIR     := $(PREFIX)/bin
 COMPDIR    := $(PREFIX)/share/bash-completion/completions
 
-.PHONY: all build help clean install uninstall links test setcap
+.PHONY: all build help clean install uninstall links test setcap lint coverage
 
 # colors for `make help` (only when stdout is a TTY)
 ifneq (,$(findstring xterm,$(TERM))$(findstring screen,$(TERM)))
@@ -89,8 +89,25 @@ setcap: $(BIN)  ## Grant CAP_NET_RAW to ./socketTool (for native ICMP without ro
 test: $(BIN) links  ## Run the full test suite (unit + e2e)
 	@bash tests/run_all.sh
 
+lint:  ## Static analysis with cppcheck (no warnings allowed)
+	@command -v cppcheck >/dev/null || { echo "cppcheck not installed"; exit 1; }
+	cppcheck --enable=warning,performance,portability --std=c99 -q \
+	    --error-exitcode=1 --inline-suppr \
+	    --suppress=memleakOnRealloc \
+	    -Isrc $(SRC_DIR)
+
+coverage: clean  ## Build+test with gcov/lcov; writes HTML to coverage/
+	@command -v lcov >/dev/null || { echo "lcov not installed"; exit 1; }
+	$(MAKE) CFLAGS="-O0 -g --coverage -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation -std=gnu99 -Isrc" LDFLAGS="--coverage" test
+	lcov --capture --directory . --output-file coverage.info --quiet
+	lcov --remove coverage.info '/usr/*' '*/tests/*' --output-file coverage.info --quiet
+	genhtml coverage.info --output-directory coverage --quiet
+	@echo "coverage report: coverage/index.html"
+
 clean:  ## Remove build artefacts and applet symlinks
 	rm -f $(OBJECTS) $(BIN)
+	find $(SRC_DIR) -name '*.gcda' -delete -o -name '*.gcno' -delete 2>/dev/null || true
+	rm -rf coverage coverage.info
 	@for a in $(APPLETS); do rm -f $$a; done
 
 ##@ Help
