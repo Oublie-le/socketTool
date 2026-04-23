@@ -9,18 +9,19 @@
 #   - the main binary `socketTool` (subcommand + options)
 #   - each applet symlink (tcp-client, tcp-server, ..., bping, btest)
 
-_socketTool_applets='tcp-client tcp-server udp-client udp-server ws-client ws-server bping btest'
+_socketTool_applets='tcp-client tcp-server udp-client udp-server ws-client ws-server bping btest diag'
 _socketTool_global='--lang --no-color -V --version -h --help'
 
 # Common option lists per applet
-_socketTool_opts_tcp_client='-H --host -p --port -m --message -i --interactive -t --timeout -c --count -h --help'
+_socketTool_opts_tcp_client='-H --host -p --port -m --message -i --interactive -t --timeout -c --count -B --bench -h --help'
 _socketTool_opts_tcp_server='-H --host -p --port -e --echo -d --discard -1 --once -h --help'
-_socketTool_opts_udp_client='-H --host -p --port -m --message -c --count -i --interval -w --wait -h --help'
+_socketTool_opts_udp_client='-H --host -p --port -m --message -c --count -i --interval -w --wait -B --bench -h --help'
 _socketTool_opts_udp_server='-H --host -p --port -e --echo -d --discard -h --help'
 _socketTool_opts_ws_client='-H --host -p --port -P --path -m --message -i --interactive -t --timeout -h --help'
 _socketTool_opts_ws_server='-H --host -p --port -e --echo -1 --once -h --help'
-_socketTool_opts_bping='-f --file -m --mode -p --port -t --timeout -j --jobs -h --help'
+_socketTool_opts_bping='-f --file -m --mode -p --port -t --timeout -j --jobs -n --no-rdns -D --no-discover -o --output -W --watch -h --help'
 _socketTool_opts_btest='-f --file -P --proto -t --timeout -j --jobs -h --help'
+_socketTool_opts_diag='-h --help'
 
 # Look up the option list for a given applet name
 _socketTool_opts_for() {
@@ -59,6 +60,11 @@ _socketTool_complete_applet() {
         -P|--proto)    # btest proto
             if [ "$applet" = "btest" ]; then
                 COMPREPLY=( $(compgen -W "tcp udp ws" -- "$cur") )
+                return 0
+            fi ;;
+        -o|--output)    # bping output format
+            if [ "$applet" = "bping" ]; then
+                COMPREPLY=( $(compgen -W "table json csv" -- "$cur") )
                 return 0
             fi ;;
         --lang)
@@ -112,4 +118,4 @@ complete -F _socketTool_complete_main    socketTool
 complete -F _socketTool_complete_symlink tcp-client tcp-server \
                                          udp-client udp-server \
                                          ws-client  ws-server  \
-                                         bping btest
+                                         bping btest diag

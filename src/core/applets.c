@@ -17,6 +17,7 @@ const struct applet applets[] = {
     { "ws-server",  ws_server_main,  T_S_WS_SERVER  },
     { "bping",      bping_main,      T_S_BPING      },
     { "btest",      btest_main,      T_S_BTEST      },
+    { "diag",       diag_main,       T_S_DIAG       },
     { NULL, NULL, 0 },
 };
 

@@ -26,5 +26,6 @@ int ws_client_main(int argc, char **argv);
 int ws_server_main(int argc, char **argv);
 int bping_main(int argc, char **argv);
 int btest_main(int argc, char **argv);
+int diag_main(int argc, char **argv);
 
 #endif

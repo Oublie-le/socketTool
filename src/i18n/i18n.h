@@ -94,6 +94,7 @@ enum {
     T_S_UDP_CLIENT, T_S_UDP_SERVER,
     T_S_WS_CLIENT,  T_S_WS_SERVER,
     T_S_BPING,      T_S_BTEST,
+    T_S_DIAG,
 
     /* bping table headers / fields */
     T_IP,
