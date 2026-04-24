@@ -22,20 +22,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        lang: [en, zh]
         include:
           - os: ubuntu-latest
-            artifact_name: socketTool-linux-x86_64
+            lang: en
+            artifact_name: socketTool-linux-x86_64-en
+          - os: ubuntu-latest
+            lang: zh
+            artifact_name: socketTool-linux-x86_64-zh
+          - os: macos-13
+            lang: en
+            artifact_name: socketTool-darwin-x86_64-en
+          - os: macos-13
+            lang: zh
+            artifact_name: socketTool-darwin-x86_64-zh
           - os: macos-latest
-            artifact_name: socketTool-darwin-x86_64
+            lang: en
+            artifact_name: socketTool-darwin-arm64-en
+          - os: macos-latest
+            lang: zh
+            artifact_name: socketTool-darwin-arm64-zh
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install build deps (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y build-essential
 
       - name: Build (UILANG=${{ matrix.lang }})
@@ -47,7 +59,7 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          NAME="${{ matrix.artifact_name }}-${{ matrix.lang }}"
+          NAME="${{ matrix.artifact_name }}"
           mkdir -p $NAME
           cp socketTool $NAME/
           cp README.md README.zh.md $NAME/
@@ -60,8 +72,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}-${{ matrix.lang }}
-          path: ${{ matrix.artifact_name }}-${{ matrix.lang }}.tar.gz
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}.tar.gz
 
   release:
     needs: build
