@@ -9,7 +9,7 @@
 #   - the main binary `socketTool` (subcommand + options)
 #   - each applet symlink (tcp-client, tcp-server, ..., bping, btest)
 
-_socketTool_applets='tcp-client tcp-server udp-client udp-server ws-client ws-server bping btest diag'
+_socketTool_applets='tcp-client tcp-server udp-client udp-server ws-client ws-server bping btest diag http-client http-server mqtt-client mqtt-server'
 _socketTool_global='--lang --no-color -V --version -h --help'
 
 # Common option lists per applet
@@ -22,6 +22,10 @@ _socketTool_opts_ws_server='-H --host -p --port -e --echo -1 --once -h --help'
 _socketTool_opts_bping='-f --file -m --mode -p --port -t --timeout -j --jobs -n --no-rdns -D --no-discover -o --output -W --watch -h --help'
 _socketTool_opts_btest='-f --file -P --proto -t --timeout -j --jobs -h --help'
 _socketTool_opts_diag='-h --help'
+_socketTool_opts_http_client='-X --method -H --header -d --data -o --output -L --location -t --timeout -h --help'
+_socketTool_opts_http_server='-H --host -p --port -r --root -1 --once -h --help'
+_socketTool_opts_mqtt_client='-H --host -p --port -t --topic -m --message -s --subscribe -c --count -i --id -k --keepalive -h --help'
+_socketTool_opts_mqtt_server='-H --host -p --port -h --help'
 
 # Look up the option list for a given applet name
 _socketTool_opts_for() {
@@ -118,4 +122,6 @@ complete -F _socketTool_complete_main    socketTool
 complete -F _socketTool_complete_symlink tcp-client tcp-server \
                                          udp-client udp-server \
                                          ws-client  ws-server  \
-                                         bping btest diag
+                                         bping btest diag \
+                                         http-client http-server \
+                                         mqtt-client mqtt-server

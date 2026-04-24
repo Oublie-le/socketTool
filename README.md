@@ -19,8 +19,10 @@ resource-constrained Linux devices.
 
 ## Features
 
-- **Multi-protocol**: TCP / UDP / WebSocket (RFC 6455 text frames)
+- **Multi-protocol**: TCP / UDP / WebSocket (RFC 6455 text frames) / HTTP/1.1 / MQTT 3.1.1 (QoS 0)
 - **Dual role**: every protocol can run as **client** or **server**
+  (TCP / UDP / WS / HTTP / MQTT all ship with both sides; servers spawn one
+  thread per connection so multiple clients no longer block each other)
 - **Batch ping** with rich input: single IP, last-octet range
   (`192.168.1.10-50`), full IP range (`a-b`), CIDR (`10.0.0.0/24`),
   or a hosts file. Both TCP-ping and **native ICMP ping** (raw socket,
@@ -120,6 +122,10 @@ Run `socketTool` with no arguments to see the colored applet list, or
 | `bping`       | Batch ping (single / range / CIDR / file, ICMP \| TCP)   |
 | `btest`       | Batch protocol connectivity test (TCP / UDP / WS)        |
 | `diag`        | Local network self-check (interfaces / gateway / DNS / MTU) |
+| `http-client` | HTTP/1.1 client: GET / POST, custom headers, follow 3xx  |
+| `http-server` | HTTP/1.1 server: canned response or static `--root` directory |
+| `mqtt-client` | MQTT 3.1.1 client (publish / subscribe, QoS 0)           |
+| `mqtt-server` | Minimal MQTT 3.1.1 broker (multi-client, QoS 0, `+` and `#` wildcards) |
 
 ### Examples
 
@@ -204,6 +210,29 @@ socketTool tcp-client -H @db                # port picked from alias
 socketTool bping -o json 192.168.1.0/24      > hosts.json
 socketTool bping -o csv  -f examples/hosts.txt > hosts.csv
 socketTool bping -W 5    192.168.1.0/24      # re-scan every 5s (Ctrl-C)
+```
+
+#### HTTP
+
+```bash
+socketTool http-server -p 8080 -r ./public       # static site
+socketTool http-client http://127.0.0.1:8080/
+socketTool http-client -X POST -d '{"k":"v"}' \
+    -H 'Content-Type: application/json' http://api.example.com/data
+socketTool http-client -L http://example.com/   # follow redirects
+```
+
+#### MQTT (3.1.1, QoS 0)
+
+```bash
+# broker on 1883
+socketTool mqtt-server -p 1883 &
+
+# subscribe, print 10 messages then exit
+socketTool mqtt-client -H 127.0.0.1 -p 1883 -t 'sensors/+/temp' -s -c 10
+
+# publish once
+socketTool mqtt-client -H 127.0.0.1 -p 1883 -t 'sensors/a/temp' -m '23.5'
 ```
 
 ---

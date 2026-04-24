@@ -18,6 +18,10 @@ const struct applet applets[] = {
     { "bping",      bping_main,      T_S_BPING      },
     { "btest",      btest_main,      T_S_BTEST      },
     { "diag",       diag_main,       T_S_DIAG       },
+    { "http-client", http_client_main, T_S_HTTP_CLIENT },
+    { "http-server", http_server_main, T_S_HTTP_SERVER },
+    { "mqtt-client", mqtt_client_main, T_S_MQTT_CLIENT },
+    { "mqtt-server", mqtt_server_main, T_S_MQTT_SERVER },
     { NULL, NULL, 0 },
 };
 

@@ -29,7 +29,8 @@ SOURCES := \
 OBJECTS := $(SOURCES:.c=.o)
 
 APPLETS := tcp-client tcp-server udp-client udp-server \
-           ws-client ws-server bping btest diag
+           ws-client ws-server bping btest diag \
+           http-client http-server mqtt-client mqtt-server
 
 PREFIX     ?= /usr/local
 BINDIR     := $(PREFIX)/bin

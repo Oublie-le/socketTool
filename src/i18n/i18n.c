@@ -84,6 +84,10 @@ static const char *en[T_MAX] = {
     [T_S_BPING]           = "Batch ping (range/CIDR/list supported)",
     [T_S_BTEST]           = "Batch protocol connectivity test",
     [T_S_DIAG]            = "Local network self-check (IP / gateway / DNS / MTU)",
+    [T_S_HTTP_CLIENT]     = "HTTP/1.1 client (GET / POST, follow redirects)",
+    [T_S_HTTP_SERVER]     = "HTTP/1.1 server (static root or canned response)",
+    [T_S_MQTT_CLIENT]     = "MQTT 3.1.1 client (pub / sub, QoS 0)",
+    [T_S_MQTT_SERVER]     = "Minimal MQTT 3.1.1 broker (QoS 0)",
 
     [T_IP]                = "ip",
     [T_HOSTNAME]          = "hostname",
@@ -163,6 +167,10 @@ static const char *zh[T_MAX] = {
     [T_S_BPING]           = "批量 ping (支持范围 / CIDR / 列表)",
     [T_S_BTEST]           = "批量协议连通性测试",
     [T_S_DIAG]            = "本机网络自检 (IP / 网关 / DNS / MTU)",
+    [T_S_HTTP_CLIENT]     = "HTTP/1.1 客户端 (GET / POST，自动跟随重定向)",
+    [T_S_HTTP_SERVER]     = "HTTP/1.1 服务端 (静态根目录或固定响应)",
+    [T_S_MQTT_CLIENT]     = "MQTT 3.1.1 客户端 (pub / sub，QoS 0)",
+    [T_S_MQTT_SERVER]     = "极简 MQTT 3.1.1 broker (QoS 0)",
 
     [T_IP]                = "IP",
     [T_HOSTNAME]          = "主机名",

@@ -95,6 +95,8 @@ enum {
     T_S_WS_CLIENT,  T_S_WS_SERVER,
     T_S_BPING,      T_S_BTEST,
     T_S_DIAG,
+    T_S_HTTP_CLIENT, T_S_HTTP_SERVER,
+    T_S_MQTT_CLIENT, T_S_MQTT_SERVER,
 
     /* bping table headers / fields */
     T_IP,

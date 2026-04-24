@@ -27,5 +27,9 @@ int ws_server_main(int argc, char **argv);
 int bping_main(int argc, char **argv);
 int btest_main(int argc, char **argv);
 int diag_main(int argc, char **argv);
+int http_client_main(int argc, char **argv);
+int http_server_main(int argc, char **argv);
+int mqtt_client_main(int argc, char **argv);
+int mqtt_server_main(int argc, char **argv);
 
 #endif

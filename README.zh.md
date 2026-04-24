@@ -14,8 +14,8 @@
 
 ## 特性
 
-- **多协议**：TCP / UDP / WebSocket（RFC 6455 文本帧）
-- **双角色**：每个协议都可作为 **客户端** 或 **服务端** 运行
+- **多协议**：TCP / UDP / WebSocket（RFC 6455 文本帧）/ HTTP/1.1 / MQTT 3.1.1 (QoS 0)
+- **双角色**：每个协议都有 **客户端 + 服务端**；服务端按连接开线程，多个客户端互不阻塞
 - **批量 ping**：支持 **单 IP / 范围 (`192.168.1.10-50`) / 完整范围 (`a-b`) / CIDR (`10.0.0.0/24`) / 主机列表文件**；**原生 C 实现的 ICMP**（无需 `/bin/ping`），亦支持 TCP-ping
 - **结果含主机信息**：`bping` 结果表格列出 target / 解析 IP / 反向 DNS hostname / 状态 / 时延 / 备注
 - **批量协议测试**：`btest` 多线程并发对多个 `host:port[:proto]` 检测
@@ -118,6 +118,10 @@ tcp-client -H 192.168.1.10 -p 8080
 | `bping`       | 批量 ping（**单点 / 范围 / CIDR / 文件**，TCP/ICMP）|
 | `btest`       | 批量协议连通性测试（TCP / UDP / WS）                |
 | `diag`        | 本机网络自检（网卡 / 网关 / DNS / MTU）             |
+| `http-client` | HTTP/1.1 客户端 (GET / POST / 自定义 header / 跟随 3xx) |
+| `http-server` | HTTP/1.1 服务端 (固定响应或 `--root` 静态目录)      |
+| `mqtt-client` | MQTT 3.1.1 客户端 (publish / subscribe，QoS 0)      |
+| `mqtt-server` | 极简 MQTT 3.1.1 broker (多客户端、QoS 0、`+`/`#` 通配) |
 
 ### 示例
 
@@ -222,6 +226,29 @@ socketTool tcp-client -H @db              # 自动读取别名里的端口
 socketTool bping -o json 192.168.1.0/24      > hosts.json
 socketTool bping -o csv  -f examples/hosts.txt > hosts.csv
 socketTool bping -W 5    192.168.1.0/24      # 每 5 秒重扫 (Ctrl-C 停)
+```
+
+#### HTTP
+
+```bash
+socketTool http-server -p 8080 -r ./public        # 静态站点
+socketTool http-client http://127.0.0.1:8080/
+socketTool http-client -X POST -d '{"k":"v"}' \
+    -H 'Content-Type: application/json' http://api.example.com/data
+socketTool http-client -L http://example.com/    # 跟随 3xx 重定向
+```
+
+#### MQTT (3.1.1，QoS 0)
+
+```bash
+# 启动 broker
+socketTool mqtt-server -p 1883 &
+
+# 订阅，收 10 条退出
+socketTool mqtt-client -H 127.0.0.1 -p 1883 -t 'sensors/+/temp' -s -c 10
+
+# 发一条
+socketTool mqtt-client -H 127.0.0.1 -p 1883 -t 'sensors/a/temp' -m '23.5'
 ```
 
 ---

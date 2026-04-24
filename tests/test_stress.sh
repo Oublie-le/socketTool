@@ -109,3 +109,35 @@ rounds=$(grep -c "127.0.0.1" "$log")
 rm -f "$log"
 tcheck "bping --watch produced >= $WATCH_MIN rounds in ${WATCH_SECS}s" \
     "[ ${rounds:-0} -ge $WATCH_MIN ]"
+
+# ---- multi-client: 2 simultaneous tcp clients on a long-running server ----
+PORT7=$(free_port)
+spawn "$BIN" tcp-server -p "$PORT7" -e >/dev/null
+wait_port "$PORT7" || { echo "concurrent tcp server didn't start"; exit 1; }
+
+(out1=$("$BIN" tcp-client -H 127.0.0.1 -p "$PORT7" -m c1 -t 1500 2>&1); \
+  echo "$out1" | grep -q c1 && echo OK > /tmp/.cc1 || echo FAIL > /tmp/.cc1) &
+p1=$!
+(out2=$("$BIN" tcp-client -H 127.0.0.1 -p "$PORT7" -m c2 -t 1500 2>&1); \
+  echo "$out2" | grep -q c2 && echo OK > /tmp/.cc2 || echo FAIL > /tmp/.cc2) &
+p2=$!
+wait "$p1" "$p2"
+tcheck "tcp-server: 2 concurrent clients both echo (no head-of-line block)" \
+    "[ \"\$(cat /tmp/.cc1)\" = OK ] && [ \"\$(cat /tmp/.cc2)\" = OK ]"
+rm -f /tmp/.cc1 /tmp/.cc2
+
+# ---- multi-client: 2 simultaneous ws clients on a long-running server -----
+PORT8=$(free_port)
+spawn "$BIN" ws-server -p "$PORT8" -e >/dev/null
+wait_port "$PORT8" || { echo "concurrent ws server didn't start"; exit 1; }
+
+(out=$("$BIN" ws-client -H 127.0.0.1 -p "$PORT8" -m wsc1 -t 1500 2>&1); \
+  echo "$out" | grep -q wsc1 && echo OK > /tmp/.wc1 || echo FAIL > /tmp/.wc1) &
+p1=$!
+(out=$("$BIN" ws-client -H 127.0.0.1 -p "$PORT8" -m wsc2 -t 1500 2>&1); \
+  echo "$out" | grep -q wsc2 && echo OK > /tmp/.wc2 || echo FAIL > /tmp/.wc2) &
+p2=$!
+wait "$p1" "$p2"
+tcheck "ws-server: 2 concurrent clients both echo (no head-of-line block)" \
+    "[ \"\$(cat /tmp/.wc1)\" = OK ] && [ \"\$(cat /tmp/.wc2)\" = OK ]"
+rm -f /tmp/.wc1 /tmp/.wc2

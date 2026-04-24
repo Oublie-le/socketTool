@@ -13,6 +13,10 @@ ws-server
 bping
 btest
 diag
+http-client
+http-server
+mqtt-client
+mqtt-server
 
 # coverage
 *.gcda
