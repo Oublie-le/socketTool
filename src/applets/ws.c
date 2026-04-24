@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <pthread.h>
 
 #include "core/applet.h"
 #include "ui/ui.h"
@@ -394,6 +395,90 @@ static int ws_handshake_server(int cfd)
     return send(cfd, resp, rl, 0) == rl ? 0 : -1;
 }
 
+struct ws_serve_arg {
+    int cfd;
+    struct sockaddr_storage peer;
+    int echo;
+};
+
+void *ws_serve_thread(void *p)
+{
+    struct ws_serve_arg *a = p;
+    int cfd = a->cfd, echo = a->echo;
+    char hbuf[64], sbuf[16];
+    getnameinfo((struct sockaddr*)&a->peer, sizeof(a->peer),
+                hbuf, sizeof(hbuf), sbuf, sizeof(sbuf),
+                NI_NUMERICHOST | NI_NUMERICSERV);
+
+    if (ws_handshake_server(cfd) < 0) {
+        ui_warn(T(T_E_HANDSHAKE));
+        close(cfd);
+        a->cfd = -1;        /* signal "no real client served" */
+        free(a); return NULL;
+    }
+    ui_ok(T(T_ACCEPTED), hbuf, sbuf);
+
+    for (;;) {
+        uint8_t *pl = NULL; size_t pn = 0; int op = 0;
+        if (ws_recv_frame(cfd, &pl, &pn, &op) < 0) break;
+        if (op == 0x8) { free(pl); break; }
+        if (op == 0x1) {
+            printf("%s<<%s [%s:%s] %.*s\n",
+                   UI_DIM, UI_RESET, hbuf, sbuf, (int)pn, pl);
+            if (echo) {
+                uint8_t f[8192];
+                ssize_t fl = ws_build_text(f, sizeof(f), pl, pn, 0);
+                if (fl > 0) send(cfd, f, fl, 0);
+            }
+        }
+        free(pl);
+    }
+    ui_info(T(T_CLOSED), hbuf, sbuf);
+    close(cfd);
+    free(a);
+    return NULL;
+}
+
+/* serve a connection, returning 1 if handshake succeeded (a real client),
+ * 0 if it was a bogus probe (e.g. the test harness's wait_port). The caller
+ * uses this to decide whether `--once` should exit yet. */
+static int ws_serve_one_sync(struct ws_serve_arg *a)
+{
+    int cfd = a->cfd, echo = a->echo;
+    struct sockaddr_storage peer = a->peer;
+    free(a);
+
+    char hbuf[64], sbuf[16];
+    getnameinfo((struct sockaddr*)&peer, sizeof(peer),
+                hbuf, sizeof(hbuf), sbuf, sizeof(sbuf),
+                NI_NUMERICHOST | NI_NUMERICSERV);
+
+    if (ws_handshake_server(cfd) < 0) {
+        ui_warn(T(T_E_HANDSHAKE));
+        close(cfd); return 0;
+    }
+    ui_ok(T(T_ACCEPTED), hbuf, sbuf);
+
+    for (;;) {
+        uint8_t *pl = NULL; size_t pn = 0; int op = 0;
+        if (ws_recv_frame(cfd, &pl, &pn, &op) < 0) break;
+        if (op == 0x8) { free(pl); break; }
+        if (op == 0x1) {
+            printf("%s<<%s [%s:%s] %.*s\n",
+                   UI_DIM, UI_RESET, hbuf, sbuf, (int)pn, pl);
+            if (echo) {
+                uint8_t f[8192];
+                ssize_t fl = ws_build_text(f, sizeof(f), pl, pn, 0);
+                if (fl > 0) send(cfd, f, fl, 0);
+            }
+        }
+        free(pl);
+    }
+    ui_info(T(T_CLOSED), hbuf, sbuf);
+    close(cfd);
+    return 1;
+}
+
 int ws_server_main(int argc, char **argv)
 {
     const char *host = NULL, *port = NULL;
@@ -431,35 +516,20 @@ int ws_server_main(int argc, char **argv)
         int cfd = accept(sfd, (struct sockaddr*)&peer, &plen);
         if (cfd < 0) { if (errno == EINTR) continue; break; }
 
-        char hbuf[64], sbuf[16];
-        getnameinfo((struct sockaddr*)&peer, plen,
-                    hbuf, sizeof(hbuf), sbuf, sizeof(sbuf),
-                    NI_NUMERICHOST | NI_NUMERICSERV);
+        struct ws_serve_arg *a = malloc(sizeof(*a));
+        if (!a) { close(cfd); continue; }
+        a->cfd = cfd; a->peer = peer; a->echo = echo;
 
-        if (ws_handshake_server(cfd) < 0) {
-            ui_warn(T(T_E_HANDSHAKE));
-            close(cfd); continue;
+        if (once) {
+            if (ws_serve_one_sync(a)) break;
+            continue;
         }
-        ui_ok(T(T_ACCEPTED), hbuf, sbuf);
-
-        for (;;) {
-            uint8_t *pl = NULL; size_t pn = 0; int op = 0;
-            if (ws_recv_frame(cfd, &pl, &pn, &op) < 0) break;
-            if (op == 0x8) { free(pl); break; }
-            if (op == 0x1) {
-                printf("%s<<%s [%s:%s] %.*s\n",
-                       UI_DIM, UI_RESET, hbuf, sbuf, (int)pn, pl);
-                if (echo) {
-                    uint8_t f[8192];
-                    ssize_t fl = ws_build_text(f, sizeof(f), pl, pn, 0);
-                    if (fl > 0) send(cfd, f, fl, 0);
-                }
-            }
-            free(pl);
+        pthread_t th;
+        if (pthread_create(&th, NULL, ws_serve_thread, a) != 0) {
+            ui_warn("pthread_create: %s", strerror(errno));
+            close(cfd); free(a); continue;
         }
-        ui_info(T(T_CLOSED), hbuf, sbuf);
-        close(cfd);
-        if (once) break;
+        pthread_detach(th);
     }
     close(sfd);
     return 0;

@@ -13,6 +13,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <pthread.h>
 
 #include "core/applet.h"
 #include "ui/ui.h"
@@ -160,6 +161,12 @@ static void tcp_server_help(void)
            T(T_DEFAULT), T(T_HELP));
 }
 
+struct serve_arg {
+    int                       cfd;
+    struct sockaddr_storage   peer;
+    int                       echo;
+};
+
 static void serve_one(int cfd, struct sockaddr_storage *peer, int echo)
 {
     char host[64], serv[16];
@@ -196,6 +203,14 @@ static void serve_one(int cfd, struct sockaddr_storage *peer, int echo)
     }
     ui_info(T(T_CLOSED), host, serv);
     close(cfd);
+}
+
+static void *serve_thread(void *p)
+{
+    struct serve_arg *a = p;
+    serve_one(a->cfd, &a->peer, a->echo);
+    free(a);
+    return NULL;
 }
 
 int tcp_server_main(int argc, char **argv)
@@ -240,8 +255,19 @@ int tcp_server_main(int argc, char **argv)
             if (errno == EINTR) continue;
             ui_err(T(T_E_RECV), strerror(errno)); break;
         }
-        serve_one(cfd, &peer, echo);
-        if (once) break;
+        if (once) {
+            serve_one(cfd, &peer, echo);
+            break;
+        }
+        struct serve_arg *a = malloc(sizeof(*a));
+        if (!a) { close(cfd); continue; }
+        a->cfd = cfd; a->peer = peer; a->echo = echo;
+        pthread_t th;
+        if (pthread_create(&th, NULL, serve_thread, a) != 0) {
+            ui_warn("pthread_create: %s", strerror(errno));
+            close(cfd); free(a); continue;
+        }
+        pthread_detach(th);
     }
     close(sfd);
     return 0;
