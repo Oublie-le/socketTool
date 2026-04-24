@@ -54,10 +54,10 @@ jobs:
 
       - name: Set arch for macOS x86_64
         if: runner.os == 'macOS' && matrix.arch == 'x86_64'
-        run: echo "CFLAGS=-arch x86_64" >> $GITHUB_ENV && echo "LDFLAGS=-arch x86_64" >> $GITHUB_ENV
+        run: echo "ARCH_FLAGS=-arch x86_64" >> $GITHUB_ENV
 
       - name: Build (UILANG=${{ matrix.lang }})
-        run: make clean && make UILANG=${{ matrix.lang }}
+        run: make clean && make UILANG=${{ matrix.lang }} CFLAGS+='${{ env.ARCH_FLAGS }}' LDFLAGS+='${{ env.ARCH_FLAGS }}'
 
       - name: Create symlinks
         run: make links
