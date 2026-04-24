@@ -63,6 +63,10 @@ jobs:
       - name: Create symlinks
         run: make links
 
+      - name: Sign binary (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --force --deep --sign - socketTool
+
       - name: Package
         shell: bash
         run: |
