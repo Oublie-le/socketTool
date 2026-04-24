@@ -52,12 +52,13 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y build-essential
 
-      - name: Set arch for macOS x86_64
-        if: runner.os == 'macOS' && matrix.arch == 'x86_64'
-        run: echo "ARCH_FLAGS=-arch x86_64" >> $GITHUB_ENV
-
       - name: Build (UILANG=${{ matrix.lang }})
-        run: make clean && make UILANG=${{ matrix.lang }} CFLAGS+='${{ env.ARCH_FLAGS }}' LDFLAGS+='${{ env.ARCH_FLAGS }}'
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ] && [ "${{ matrix.arch }}" = "x86_64" ]; then
+            make clean && make UILANG=${{ matrix.lang }} CFLAGS="-arch x86_64" LDFLAGS="-arch x86_64"
+          else
+            make clean && make UILANG=${{ matrix.lang }}
+          fi
 
       - name: Create symlinks
         run: make links
