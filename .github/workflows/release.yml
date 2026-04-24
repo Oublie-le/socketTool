@@ -1,0 +1,87 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as prerelease'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        lang: [en, zh]
+        include:
+          - os: ubuntu-latest
+            artifact_name: socketTool-linux-x86_64
+          - os: macos-latest
+            artifact_name: socketTool-darwin-x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build deps (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Build (UILANG=${{ matrix.lang }})
+        run: make clean && make UILANG=${{ matrix.lang }}
+
+      - name: Create symlinks
+        run: make links
+
+      - name: Package
+        shell: bash
+        run: |
+          NAME="${{ matrix.artifact_name }}-${{ matrix.lang }}"
+          mkdir -p $NAME
+          cp socketTool $NAME/
+          cp README.md README.zh.md $NAME/
+          cp scripts/socketTool.bash-completion $NAME/
+          for a in tcp-client tcp-server udp-client udp-server ws-client ws-server bping btest diag http-client http-server mqtt-client mqtt-server; do
+            ln -s socketTool $NAME/$a
+          done
+          tar czf $NAME.tar.gz $NAME/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-${{ matrix.lang }}
+          path: ${{ matrix.artifact_name }}-${{ matrix.lang }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure
+        run: ls -R artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: ${{ inputs.version }}
+          prerelease: ${{ inputs.prerelease }}
+          files: artifacts/*/*.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
