@@ -55,7 +55,7 @@ jobs:
       - name: Build (UILANG=${{ matrix.lang }})
         run: |
           if [ "${{ runner.os }}" = "macOS" ] && [ "${{ matrix.arch }}" = "x86_64" ]; then
-            make clean && make UILANG=${{ matrix.lang }} CFLAGS="-arch x86_64" LDFLAGS="-arch x86_64"
+            make clean && make UILANG=${{ matrix.lang }} CFLAGS="-O2 -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation -std=gnu99 -Isrc -arch x86_64" LDFLAGS="-arch x86_64"
           else
             make clean && make UILANG=${{ matrix.lang }}
           fi
